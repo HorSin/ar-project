@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- Makes the page scale correctly on mobile phones. REQUIRED for AR. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>My First WebAR</title>
+
+  <!--
+    ============================================================
+    1) LOAD THE TWO FREE LIBRARIES (from a free public CDN)
+    ============================================================
+    - A-Frame: makes it easy to put 3D / 2D things on a web page.
+    - MindAR:  watches the camera and detects your target photo.
+    You do NOT need to download these. The browser fetches them.
+  -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    /* Make the AR view fill the whole screen with no scrollbars. */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+
+    /* A friendly message shown while the camera is starting up. */
+    #loading {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      background: #000; color: #fff; font-family: sans-serif;
+      font-size: 18px; text-align: center; z-index: 9999; padding: 24px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Shown until the camera + tracker are ready, then hidden by the script below. -->
+  <div id="loading">Starting camera… point it at your target photo 📸</div>
+
+  <!--
+    ============================================================
+    THE AR SCENE
+    ============================================================
+    mindar-image="imageTargetSrc: targets.mind;"
+       -> tells MindAR which tracking file to use (you create this in Step 1).
+    autoStart: false
+       -> we start it manually after the page loads (more reliable on iPhone).
+    color-space, device-orientation, etc. are sensible defaults; leave them.
+  -->
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets>
+      <!--
+        Replace "your-video.mp4" with the filename of your video.
+        Put the video file in the same folder as index.html.
+        muted is required for autoplay on iOS/Android.
+      -->
+      <video id="ar-video" src="stitch.mp4" playsinline webkit-playsinline loop muted></video>
+    </a-assets>
+
+    <!-- A camera is required. Leave these settings as-is. -->
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!--
+      ============================================================
+      THE TARGET + WHAT APPEARS ON IT
+      ============================================================
+      An <a-entity mindar-image-target="targetIndex: 0"> is the
+      "anchor" for the FIRST image inside your targets.mind file.
+      Anything you put INSIDE it will float on top of that photo,
+      and disappear when the photo leaves the camera view.
+
+      The target is treated as 1 unit wide. So:
+        width = 1   -> same width as your photo
+        height = ?  -> match your photo's shape (e.g. 0.55 for landscape)
+    -->
+    <a-entity mindar-image-target="targetIndex: 0">
+
+      <!-- ===== PLACEHOLDER A: A SIMPLE 2D IMAGE OVERLAY ===== -->
+      <!--
+        Shows an image floating over the photo.
+        Replace the src with your own picture (PNG with transparency
+        looks best). Put that file in the same folder and change the name.
+        Remove this <a-image> line if you only want the text popup.
+      -->
+      <a-image
+        src="stitch.png"
+        position="0 0 0"
+        height="0.552"
+        width="1"
+        rotation="0 0 0"
+        opacity="0.9">
+      </a-image>
+
+      <!-- ===== PLACEHOLDER B: FLOATING VIDEO ===== -->
+      <!--
+        Plays a video floating above the target photo.
+        width="1" matches the target width; height="0.5625" = 16:9 ratio.
+        Adjust position "0 0.7 0" to move it up/down/sideways.
+      -->
+      <a-video
+        src="#ar-video"
+        width="1"
+        height="0.5625"
+        position="0 0.7 0">
+      </a-video>
+
+    </a-entity>
+  </a-scene>
+
+  <script>
+    // ============================================================
+    // START THE CAMERA AFTER THE PAGE IS READY
+    // ============================================================
+    // We wait for A-Frame to finish loading, then start MindAR.
+    // We also hide the "loading" message once tracking begins.
+    window.addEventListener('DOMContentLoaded', function () {
+      const sceneEl = document.querySelector('a-scene');
+      const loadingEl = document.getElementById('loading');
+
+      sceneEl.addEventListener('loaded', function () {
+        const arSystem = sceneEl.systems['mindar-image-system'];
+        arSystem.start(); // turns on the camera and starts tracking
+      });
+
+      // Hide the loading message once the camera video is actually running.
+      sceneEl.addEventListener('arReady', function () {
+        loadingEl.style.display = 'none';
+      });
+
+      // Play video when target is visible, pause when it disappears.
+      const video = document.getElementById('ar-video');
+      const target = document.querySelector('[mindar-image-target]');
+      target.addEventListener('targetFound', function () {
+        video.play();
+      });
+      target.addEventListener('targetLost', function () {
+        video.pause();
+      });
+    });
+  </script>
+</body>
+</html>
