@@ -29,12 +29,21 @@
       font-size: 18px; text-align: center; z-index: 9999; padding: 24px;
       box-sizing: border-box;
     }
+
+    #unmute-btn {
+      display: none;
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      padding: 12px 28px; background: rgba(0,0,0,0.65); color: #fff;
+      font-family: sans-serif; font-size: 16px; border: 2px solid #fff;
+      border-radius: 30px; cursor: pointer; z-index: 9999;
+    }
   </style>
 </head>
 
 <body>
   <!-- Shown until the camera + tracker are ready, then hidden by the script below. -->
   <div id="loading">Starting camera… point it at your target photo 📸</div>
+  <button id="unmute-btn">🔊 Tap for Sound</button>
 
   <!--
     ============================================================
@@ -59,7 +68,7 @@
         Put the video file in the same folder as index.html.
         muted is required for autoplay on iOS/Android.
       -->
-      <video id="ar-video" src="stitch.mp4" playsinline webkit-playsinline loop muted></video>
+      <video id="ar-video" src="stitch.mp4" playsinline webkit-playsinline loop muted preload="auto"></video>
     </a-assets>
 
     <!-- A camera is required. Leave these settings as-is. -->
@@ -80,31 +89,7 @@
     -->
     <a-entity mindar-image-target="targetIndex: 0">
 
-      <!-- ===== PLACEHOLDER A: A SIMPLE 2D IMAGE OVERLAY ===== -->
-      <!--
-        Shows an image floating over the photo.
-        Replace the src with your own picture (PNG with transparency
-        looks best). Put that file in the same folder and change the name.
-        Remove this <a-image> line if you only want the text popup.
-      -->
-      <a-image
-        src="stitch.png"
-        position="0 0 0"
-        height="0.552"
-        width="1"
-        rotation="0 0 0"
-        opacity="0.9">
-      </a-image>
-
-      <!-- ===== QR CODE LINKING TO GITHUB PAGE ===== -->
-      <a-image
-        src="https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=https://horsin.github.io/ar-project/"
-        position="0 -0.6 0"
-        width="0.35"
-        height="0.35">
-      </a-image>
-
-      <!-- ===== PLACEHOLDER B: FLOATING VIDEO ===== -->
+      <!-- ===== FLOATING VIDEO ===== -->
       <!--
         Plays a video floating above the target photo.
         width="1" matches the target width; height="0.5625" = 16:9 ratio.
@@ -140,14 +125,25 @@
         loadingEl.style.display = 'none';
       });
 
-      // Play video when target is visible, pause when it disappears.
       const video = document.getElementById('ar-video');
+      const unmuteBtn = document.getElementById('unmute-btn');
       const target = document.querySelector('[mindar-image-target]');
+
+      // Show unmute button when target is found, hide when lost.
       target.addEventListener('targetFound', function () {
         video.play();
+        if (video.muted) unmuteBtn.style.display = 'block';
       });
       target.addEventListener('targetLost', function () {
         video.pause();
+        unmuteBtn.style.display = 'none';
+      });
+
+      // Unmute on tap — requires user gesture to satisfy browser policy.
+      unmuteBtn.addEventListener('click', function () {
+        video.muted = false;
+        video.play();
+        unmuteBtn.style.display = 'none';
       });
     });
   </script>
