@@ -104,10 +104,10 @@
     <a-entity mindar-image-target="targetIndex: 0">
 
       <!-- ===== 3D NAVIGATION ARROWS ===== -->
-      <!-- Bracket the center card (active video half-width ≈ 0.10 at scale 0.20). -->
-      <a-text id="arrow-left"  value="❮" position="-0.14 0.7 0.02"
+      <!-- Bracket the center card (active video half-width ≈ 0.25 at scale 0.50). -->
+      <a-text id="arrow-left"  value="❮" position="-0.32 0.7 0.02"
         align="center" color="white" width="3" visible="false"></a-text>
-      <a-text id="arrow-right" value="❯" position=" 0.14 0.7 0.02"
+      <a-text id="arrow-right" value="❯" position=" 0.32 0.7 0.02"
         align="center" color="white" width="3" visible="false"></a-text>
 
       <!-- ===== COVER FLOW CURVED CAROUSEL =====
@@ -116,11 +116,11 @@
         JavaScript animates ALL planes simultaneously on every swipe.
 
         Slot table (COVERFLOW_SLOTS in script):
-          Slot 0 (far-left):  x=-0.42  z=-0.06  rotY=+35°  scale=0.12
-          Slot 1 (left):      x=-0.22  z=-0.03  rotY=+20°  scale=0.15
-          Slot 2 (center):    x=  0    z=  0    rotY=  0°  scale=0.20  ← active
-          Slot 3 (right):     x=+0.22  z=-0.03  rotY=-20°  scale=0.15
-          Slot 4 (far-right): x=+0.42  z=-0.06  rotY=-35°  scale=0.12
+          Slot 0 (far-left):  x=-0.52  z=-0.22  rotY=+65°  scale=0.25
+          Slot 1 (left):      x=-0.30  z=-0.07  rotY=+38°  scale=0.35
+          Slot 2 (center):    x=  0    z=+0.02  rotY=  0°  scale=0.50  ← active
+          Slot 3 (right):     x=+0.30  z=-0.07  rotY=-38°  scale=0.35
+          Slot 4 (far-right): x=+0.52  z=-0.22  rotY=-65°  scale=0.25
 
         Initial mapping (currentIndex=0):
           plane-0  rel=0 → slot 2 (center)
@@ -130,25 +130,25 @@
           plane-4  rel=4 → slot 1 (left)
       -->
 
-      <!-- plane-0: slot 2 — center (active), z=0.02 pops it in front -->
+      <!-- plane-0: slot 2 — center (active) -->
       <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
-        position="0 0.7 0.02" scale="0.20 0.20 0.20" rotation="0 0 0" visible="false"></a-video>
+        position="0 0.7 0.02" scale="0.50 0.50 0.50" rotation="0 0 0" visible="false"></a-video>
 
       <!-- plane-1: slot 3 — right -->
       <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-        position="0.22 0.7 -0.03" scale="0.15 0.15 0.15" rotation="0 -20 0" visible="false"></a-video>
+        position="0.30 0.7 -0.07" scale="0.35 0.35 0.35" rotation="0 -38 0" visible="false"></a-video>
 
       <!-- plane-2: slot 4 — far-right -->
       <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-        position="0.42 0.7 -0.06" scale="0.12 0.12 0.12" rotation="0 -35 0" visible="false"></a-video>
+        position="0.52 0.7 -0.22" scale="0.25 0.25 0.25" rotation="0 -65 0" visible="false"></a-video>
 
       <!-- plane-3: slot 0 — far-left -->
       <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-        position="-0.42 0.7 -0.06" scale="0.12 0.12 0.12" rotation="0 35 0" visible="false"></a-video>
+        position="-0.52 0.7 -0.22" scale="0.25 0.25 0.25" rotation="0 65 0" visible="false"></a-video>
 
       <!-- plane-4: slot 1 — left -->
       <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-        position="-0.22 0.7 -0.03" scale="0.15 0.15 0.15" rotation="0 20 0" visible="false"></a-video>
+        position="-0.30 0.7 -0.07" scale="0.35 0.35 0.35" rotation="0 38 0" visible="false"></a-video>
 
     </a-entity>
   </a-scene>
@@ -410,15 +410,15 @@
       var ANIM_MS = 500;
       var Y_BASE  = 0.7;  // vertical height shared by all cards
 
-      // Slot layout tuned for a clearly rounded cylindrical curve.
-      // Larger z offsets (especially for far cards) are what make it look
-      // round rather than flat. Increase sx values if cards look too small.
+      // Slot layout — cylindrical curve with large cards.
+      // To resize: edit sx (scale). To adjust spread: edit x. To adjust
+      // depth curve: edit z (more negative = rounder). To adjust tilt: edit ry.
       var COVERFLOW_SLOTS = [
-        { x: -0.38, z: -0.22, ry:  65, sx: 0.10 }, // 0: far-left
-        { x: -0.22, z: -0.07, ry:  38, sx: 0.14 }, // 1: left
-        { x:  0,    z:  0.02, ry:   0, sx: 0.20 }, // 2: center (active)
-        { x:  0.22, z: -0.07, ry: -38, sx: 0.14 }, // 3: right
-        { x:  0.38, z: -0.22, ry: -65, sx: 0.10 }, // 4: far-right
+        { x: -0.52, z: -0.22, ry:  65, sx: 0.25 }, // 0: far-left
+        { x: -0.30, z: -0.07, ry:  38, sx: 0.35 }, // 1: left
+        { x:  0,    z:  0.02, ry:   0, sx: 0.50 }, // 2: center (active)
+        { x:  0.30, z: -0.07, ry: -38, sx: 0.35 }, // 3: right
+        { x:  0.52, z: -0.22, ry: -65, sx: 0.25 }, // 4: far-right
       ];
 
       // Maps a video index to its current slot (0–4).
