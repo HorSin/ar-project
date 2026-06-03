@@ -104,51 +104,51 @@
     <a-entity mindar-image-target="targetIndex: 0">
 
       <!-- ===== 3D NAVIGATION ARROWS ===== -->
-      <!-- Positioned at the sides of the front carousel slot (z=0.55 = just in front of z=0.5 radius). -->
-      <a-text id="arrow-left"  value="❮" position="-0.7 0.7 0.55"
+      <!-- Bracket the center card (active video half-width ≈ 0.10 at scale 0.20). -->
+      <a-text id="arrow-left"  value="❮" position="-0.14 0.7 0.02"
         align="center" color="white" width="3" visible="false"></a-text>
-      <a-text id="arrow-right" value="❯" position=" 0.7 0.7 0.55"
+      <a-text id="arrow-right" value="❯" position=" 0.14 0.7 0.02"
         align="center" color="white" width="3" visible="false"></a-text>
 
-      <!-- ===== ROTATING 3D CAROUSEL ===== -->
-      <!--
-        All 5 video planes are children of carousel-group.
-        They are arranged in a circle of radius 0.5 AR units.
-        The GROUP rotates on its Y axis to bring each video to the front.
+      <!-- ===== COVER FLOW CURVED CAROUSEL =====
+        All 5 planes are direct children of the target entity.
+        Each has its own position/scale/rotation for its starting slot.
+        JavaScript animates ALL planes simultaneously on every swipe.
 
-        Each plane's position (x, 0, z) is: (R·sin θ, 0, R·cos θ)
-        Each plane's rotation Y is –θ so it always faces outward.
+        Slot table (COVERFLOW_SLOTS in script):
+          Slot 0 (far-left):  x=-0.42  z=-0.06  rotY=+35°  scale=0.12
+          Slot 1 (left):      x=-0.22  z=-0.03  rotY=+20°  scale=0.15
+          Slot 2 (center):    x=  0    z=  0    rotY=  0°  scale=0.20  ← active
+          Slot 3 (right):     x=+0.22  z=-0.03  rotY=-20°  scale=0.15
+          Slot 4 (far-right): x=+0.42  z=-0.06  rotY=-35°  scale=0.12
 
-        Angle step = 360° / 5 = 72°
-
-          plane-0:  θ =   0°  →  pos( 0.000,  0,  0.500)  rotY=   0°  ← front
-          plane-1:  θ =  72°  →  pos( 0.476,  0,  0.155)  rotY= –72°
-          plane-2:  θ = 144°  →  pos( 0.294,  0, –0.405)  rotY=–144°
-          plane-3:  θ = 216°  →  pos(–0.294,  0, –0.405)  rotY= 144°
-          plane-4:  θ = 288°  →  pos(–0.476,  0,  0.155)  rotY=  72°
-
-        JavaScript spins carousel-group by ±72° per swipe.
-        To add a 6th video: add a plane here, update VIDEO_COUNT and the
-        angle math in the CAROUSEL CONFIG section of the script.
+        Initial mapping (currentIndex=0):
+          plane-0  rel=0 → slot 2 (center)
+          plane-1  rel=1 → slot 3 (right)
+          plane-2  rel=2 → slot 4 (far-right)
+          plane-3  rel=3 → slot 0 (far-left)
+          plane-4  rel=4 → slot 1 (left)
       -->
-      <a-entity id="carousel-group" position="0 0.7 0" rotation="0 0 0">
 
-        <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
-          position="0 0 0.5" rotation="0 0 0" visible="false"></a-video>
+      <!-- plane-0: slot 2 — center (active) -->
+      <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
+        position="0 0.7 0" scale="0.20 0.20 0.20" rotation="0 0 0" visible="false"></a-video>
 
-        <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-          position="0.476 0 0.155" rotation="0 -72 0" visible="false"></a-video>
+      <!-- plane-1: slot 3 — right -->
+      <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
+        position="0.22 0.7 -0.03" scale="0.15 0.15 0.15" rotation="0 -20 0" visible="false"></a-video>
 
-        <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-          position="0.294 0 -0.405" rotation="0 -144 0" visible="false"></a-video>
+      <!-- plane-2: slot 4 — far-right -->
+      <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
+        position="0.42 0.7 -0.06" scale="0.12 0.12 0.12" rotation="0 -35 0" visible="false"></a-video>
 
-        <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-          position="-0.294 0 -0.405" rotation="0 144 0" visible="false"></a-video>
+      <!-- plane-3: slot 0 — far-left -->
+      <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
+        position="-0.42 0.7 -0.06" scale="0.12 0.12 0.12" rotation="0 35 0" visible="false"></a-video>
 
-        <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-          position="-0.476 0 0.155" rotation="0 72 0" visible="false"></a-video>
-
-      </a-entity>
+      <!-- plane-4: slot 1 — left -->
+      <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
+        position="-0.22 0.7 -0.03" scale="0.15 0.15 0.15" rotation="0 20 0" visible="false"></a-video>
 
     </a-entity>
   </a-scene>
@@ -394,24 +394,60 @@
 
 
       // ============================================================
-      // ROTATING 3D CAROUSEL
+      // COVER FLOW CAROUSEL
       // ============================================================
-      // All 5 planes are children of #carousel-group.
-      // Their positions and rotations are FIXED in the group's local space
-      // (defined in the HTML). To switch videos we simply rotate the
-      // entire group by ±STEP_DEG on its Y axis — one clean animation,
-      // no per-plane position math needed at runtime.
+      // 5 slots in a horizontal arc. Each plane lives at its own
+      // position/scale/rotation. On every swipe ALL planes animate
+      // simultaneously to their next slot — the whole arc flows left
+      // or right as a single smooth unit.
+      //
+      // To tune the look, edit COVERFLOW_SLOTS:
+      //   x   = horizontal offset from target centre
+      //   z   = depth (negative = behind the target plane)
+      //   ry  = Y-axis rotation in degrees (inward tilt)
+      //   sx  = uniform scale (active = 0.20 = 20% of target width)
 
-      var ANIM_MS  = 600;               // spin duration in ms
-      var STEP_DEG = 360 / VIDEO_COUNT; // 72° per step for 5 videos
-      var carouselDeg = 0;              // cumulative group rotation (degrees)
+      var ANIM_MS = 500;
+      var Y_BASE  = 0.7;  // vertical height shared by all cards
 
-      var carouselGroup = document.getElementById('carousel-group');
+      var COVERFLOW_SLOTS = [
+        { x: -0.42, z: -0.06, ry:  35, sx: 0.12 }, // 0: far-left
+        { x: -0.22, z: -0.03, ry:  20, sx: 0.15 }, // 1: left
+        { x:  0,    z:  0,    ry:   0, sx: 0.20 }, // 2: center (active)
+        { x:  0.22, z: -0.03, ry: -20, sx: 0.15 }, // 3: right
+        { x:  0.42, z: -0.06, ry: -35, sx: 0.12 }, // 4: far-right
+      ];
 
-      // Make all planes visible and apply dynamic heights.
-      // The group's rotation is NOT changed here — caller sets it.
+      // Maps a video index to its current slot (0–4).
+      //   relative 0 → slot 2 (active center)
+      //   relative 1 → slot 3 (right)      relative 4 → slot 1 (left)
+      //   relative 2 → slot 4 (far-right)  relative 3 → slot 0 (far-left)
+      function getSlotIndex(videoIdx) {
+        var rel = (videoIdx - currentIndex + VIDEO_COUNT) % VIDEO_COUNT;
+        return (rel + 2) % VIDEO_COUNT;
+      }
+
+      // Apply a slot's transform to a plane — instantly or animated.
+      function applySlot(plane, slotIdx, animate) {
+        var s      = COVERFLOW_SLOTS[slotIdx];
+        var posStr = s.x + ' ' + Y_BASE + ' ' + s.z;
+        var rotStr = '0 ' + s.ry + ' 0';
+        var scaStr = s.sx + ' ' + s.sx + ' ' + s.sx;
+        if (animate) {
+          plane.setAttribute('animation__pos',   { property: 'position', to: posStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+          plane.setAttribute('animation__rot',   { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+          plane.setAttribute('animation__scale', { property: 'scale',    to: scaStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+        } else {
+          plane.setAttribute('position', posStr);
+          plane.setAttribute('rotation', rotStr);
+          plane.setAttribute('scale',    scaStr);
+        }
+      }
+
+      // Snap all planes to their current slots instantly and make them visible.
       function updateLayout() {
         planes.forEach(function (plane, i) {
+          applySlot(plane, getSlotIndex(i), false);
           plane.setAttribute('height',  getPlaneHeight(i));
           plane.setAttribute('visible', true);
         });
@@ -420,10 +456,12 @@
         });
       }
 
-      // Stop any in-progress spin and hide all planes.
+      // Cancel all in-progress animations and hide every plane.
       function resetAllPlanes() {
-        carouselGroup.removeAttribute('animation__spin');
         planes.forEach(function (p) {
+          p.removeAttribute('animation__pos');
+          p.removeAttribute('animation__rot');
+          p.removeAttribute('animation__scale');
           p.setAttribute('visible', false);
         });
       }
@@ -472,29 +510,25 @@
 
 
       // ============================================================
-      // SWITCH VIDEO — rotate the carousel group
+      // SWITCH VIDEO — Cover Flow slide transition
       // ============================================================
-      // Swipe left  (+1): group rotates -STEP_DEG (next video spins to front).
-      // Swipe right (-1): group rotates +STEP_DEG (prev video spins to front).
-      // All 5 planes move together as a physical spinning carousel.
+      // Swipe left  (+1): arc flows left  → next video comes to center.
+      // Swipe right (-1): arc flows right → prev video comes to center.
+      // ALL 5 planes animate to their new slots simultaneously.
       function switchVideo(direction) {
         if (!isMarkerVisible || isAnimating) return;
         isAnimating = true;
 
-        // Pause and rewind the outgoing video.
+        // Pause and rewind the outgoing center video.
         videos[currentIndex].pause();
         videos[currentIndex].currentTime = 0;
 
-        // Rotate carousel: subtract direction*step so next video comes forward.
-        carouselDeg -= direction * STEP_DEG;
+        // Advance the active index.
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
 
-        // Animate the group spinning to the new angle.
-        carouselGroup.setAttribute('animation__spin', {
-          property: 'rotation',
-          to:       '0 ' + carouselDeg + ' 0',
-          dur:      ANIM_MS,
-          easing:   'easeInOutCubic'
+        // Animate every plane to its new Cover Flow slot in parallel.
+        planes.forEach(function (plane, i) {
+          applySlot(plane, getSlotIndex(i), true);
         });
 
         // Update dot indicator.
@@ -502,11 +536,11 @@
           d.classList.toggle('active', i === currentIndex);
         });
 
-        // Play the newly active video with audio.
+        // Unmute and play the newly centered video.
         videos[currentIndex].muted = false;
         videos[currentIndex].play();
 
-        // Unlock swipes after the spin finishes.
+        // Unlock swipes once all animations complete.
         setTimeout(function () { isAnimating = false; }, ANIM_MS + 50);
       }
 
@@ -520,11 +554,8 @@
         isMarkerVisible = true;
         isAnimating     = false;
 
-        // Restore the carousel to the correct angle for the current video,
-        // then show all planes. No animation — instant snap.
-        carouselDeg = -(currentIndex * STEP_DEG);
-        carouselGroup.removeAttribute('animation__spin');
-        carouselGroup.setAttribute('rotation', '0 ' + carouselDeg + ' 0');
+        // Snap all 5 planes to their correct Cover Flow slots instantly,
+        // then make everything visible. No animation on first appearance.
         resetAllPlanes();
         updateLayout();
         setIndicatorsVisible(true);
