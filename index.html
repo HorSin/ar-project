@@ -410,12 +410,15 @@
       var ANIM_MS = 500;
       var Y_BASE  = 0.7;  // vertical height shared by all cards
 
+      // Slot layout tuned for a clearly rounded cylindrical curve.
+      // Larger z offsets (especially for far cards) are what make it look
+      // round rather than flat. Increase sx values if cards look too small.
       var COVERFLOW_SLOTS = [
-        { x: -0.42, z: -0.06, ry:  35, sx: 0.12 }, // 0: far-left
-        { x: -0.22, z: -0.03, ry:  20, sx: 0.15 }, // 1: left
-        { x:  0,    z:  0.02, ry:   0, sx: 0.20 }, // 2: center (active) — z=0.02 pops it in front
-        { x:  0.22, z: -0.03, ry: -20, sx: 0.15 }, // 3: right
-        { x:  0.42, z: -0.06, ry: -35, sx: 0.12 }, // 4: far-right
+        { x: -0.38, z: -0.22, ry:  65, sx: 0.10 }, // 0: far-left
+        { x: -0.22, z: -0.07, ry:  38, sx: 0.14 }, // 1: left
+        { x:  0,    z:  0.02, ry:   0, sx: 0.20 }, // 2: center (active)
+        { x:  0.22, z: -0.07, ry: -38, sx: 0.14 }, // 3: right
+        { x:  0.38, z: -0.22, ry: -65, sx: 0.10 }, // 4: far-right
       ];
 
       // Maps a video index to its current slot (0–4).
@@ -428,34 +431,40 @@
       }
 
       // Apply a slot's transform to a plane — instantly or animated.
-      function applySlot(plane, slotIdx, animate) {
+      // Pass skipRotation=true for the active (center) plane so that
+      // look-at handles rotation exclusively, with no animation conflict.
+      function applySlot(plane, slotIdx, animate, skipRotation) {
         var s      = COVERFLOW_SLOTS[slotIdx];
         var posStr = s.x + ' ' + Y_BASE + ' ' + s.z;
         var rotStr = '0 ' + s.ry + ' 0';
         var scaStr = s.sx + ' ' + s.sx + ' ' + s.sx;
         if (animate) {
           plane.setAttribute('animation__pos',   { property: 'position', to: posStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
-          plane.setAttribute('animation__rot',   { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           plane.setAttribute('animation__scale', { property: 'scale',    to: scaStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+          if (!skipRotation) {
+            plane.setAttribute('animation__rot', { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+          } else {
+            plane.removeAttribute('animation__rot'); // let look-at own rotation
+          }
         } else {
           plane.setAttribute('position', posStr);
-          plane.setAttribute('rotation', rotStr);
           plane.setAttribute('scale',    scaStr);
+          if (!skipRotation) {
+            plane.setAttribute('rotation', rotStr);
+          }
         }
       }
 
       // Snap all planes to their current slots instantly and make them visible.
-      // The active (center) plane gets look-at so it always faces the camera.
-      // Side planes have look-at removed so their tilt angles are respected.
+      // Active plane: look-at handles rotation (skipRotation=true).
+      // Side planes: rotation is set to their tilt angle, look-at removed.
       function updateLayout() {
         planes.forEach(function (plane, i) {
-          applySlot(plane, getSlotIndex(i), false);
+          var isCenter = (i === currentIndex);
+          applySlot(plane, getSlotIndex(i), false, isCenter);
           plane.setAttribute('height',  getPlaneHeight(i));
           plane.setAttribute('visible', true);
-          if (i === currentIndex) {
-            // look-at overrides the rotation every frame so the active
-            // video always faces the user, regardless of how the target
-            // image is angled relative to the camera.
+          if (isCenter) {
             plane.setAttribute('look-at', '[camera]');
           } else {
             plane.removeAttribute('look-at');
@@ -532,8 +541,8 @@
 
         var oldIndex = currentIndex;
 
-        // Remove look-at from the outgoing plane BEFORE animating it —
-        // look-at would fight the rotation animation otherwise.
+        // Remove look-at from the outgoing center BEFORE animating it
+        // so the rotation animation can freely tilt it to its new slot.
         planes[oldIndex].removeAttribute('look-at');
 
         // Pause and rewind the outgoing video.
@@ -543,9 +552,17 @@
         // Advance the active index.
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
 
-        // Animate every plane to its new Cover Flow slot in parallel.
+        // Animate all planes to their new slots.
+        // The incoming center skips rotation animation (skipRotation=true)
+        // so look-at owns the rotation without any conflict.
         planes.forEach(function (plane, i) {
-          applySlot(plane, getSlotIndex(i), true);
+          var isCenter = (i === currentIndex);
+          applySlot(plane, getSlotIndex(i), true, isCenter);
+          if (isCenter) {
+            // Add look-at IMMEDIATELY so the video faces the user
+            // throughout the slide-in animation, not just after it ends.
+            plane.setAttribute('look-at', '[camera]');
+          }
         });
 
         // Update dot indicator.
@@ -557,12 +574,7 @@
         videos[currentIndex].muted = false;
         videos[currentIndex].play();
 
-        // After animation: add look-at to the new center so it snaps
-        // to face the camera and stays there regardless of target angle.
-        setTimeout(function () {
-          planes[currentIndex].setAttribute('look-at', '[camera]');
-          isAnimating = false;
-        }, ANIM_MS + 50);
+        setTimeout(function () { isAnimating = false; }, ANIM_MS + 50);
       }
 
 
