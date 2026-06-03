@@ -45,13 +45,6 @@
     #scan-instruction h2 { margin: 0; font-size: 20px; font-weight: bold; line-height: 1.4; }
     #scan-instruction p  { margin: 0; font-size: 14px; opacity: 0.7; line-height: 1.5; }
 
-    /* Wrapper so the QR code can be absolutely positioned over scan.jpg. */
-    #scan-target-wrapper {
-      position: relative;
-      display: inline-block;
-      line-height: 0; /* removes inline gap below image */
-    }
-
     /* The target image thumbnail with a pulsing border so it draws the eye. */
     #scan-target-img {
       width: 180px; max-width: 55vw;
@@ -59,19 +52,6 @@
       border: 3px solid #fff;
       box-shadow: 0 0 0 0 rgba(255,255,255,0.7);
       animation: scan-pulse 2s infinite;
-      display: block;
-    }
-
-    /* QR code pinned to the bottom-right corner of the target thumbnail. */
-    #scan-qr-img {
-      position: absolute;
-      bottom: 6px;
-      right: 6px;
-      width: 44px;
-      height: 44px;
-      border-radius: 6px;
-      border: 2px solid #fff;
-      background: #fff; /* white backing in case image has transparency */
     }
     @keyframes scan-pulse {
       0%   { box-shadow: 0 0 0  0   rgba(255,255,255,0.7); }
@@ -115,10 +95,7 @@
     The stitch.png thumbnail shows users exactly which image to point at.
   -->
   <div id="scan-instruction">
-    <div id="scan-target-wrapper">
-      <img id="scan-target-img" src="scan.jpg" alt="Target image" />
-      <img id="scan-qr-img"     src="QRCode.png" alt="QR Code" />
-    </div>
+    <img id="scan-target-img" src="stitch.png" alt="Target image" />
     <h2 id="scan-title">Point your camera at this image</h2>
     <p  id="scan-subtitle">Keep the image inside the camera view</p>
   </div>
