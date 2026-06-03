@@ -103,30 +103,6 @@
 
     <a-entity mindar-image-target="targetIndex: 0">
 
-      <!-- ===== 3D DEPTH CUE: DECK-OF-CARDS BACKGROUND ===== -->
-      <!--
-        Two dark planes sit behind and to the right of the active video,
-        slightly angled, to suggest a physical stack of video cards.
-        They never move — they are pure decoration that communicates
-        "there are more videos behind this one."
-        Shown when the target is found; hidden when it is lost.
-      -->
-      <a-plane id="deck-card-1"
-        width="1" height="0.5625"
-        position="0.07 0.68 -0.01"
-        rotation="0 0 -4"
-        color="#444444" opacity="0.55"
-        visible="false">
-      </a-plane>
-
-      <a-plane id="deck-card-2"
-        width="1" height="0.5625"
-        position="0.14 0.66 -0.02"
-        rotation="0 0 -8"
-        color="#333333" opacity="0.4"
-        visible="false">
-      </a-plane>
-
       <!-- ===== 3D NAVIGATION ARROWS ===== -->
       <!--
         Floating chevron characters on either side of the active video.
@@ -171,6 +147,155 @@
 
 
     // ============================================================
+    // TRANSLATIONS
+    // ============================================================
+    // UI strings for every supported language.
+    // To add a new language: copy the 'en' block, change the key to
+    // the ISO 639-1 code (e.g. 'fr'), and fill in the translated strings.
+    const TRANSLATIONS = {
+      en: {
+        start:    'Tap to Start AR',
+        subtitle: 'Point your camera at\nyour target photo after tapping.',
+        starting: 'Starting…',
+        swipe:    '← Swipe to browse videos →'
+      },
+      // ── Chinese Simplified ──
+      zh: {
+        start:    '点击开始 AR',
+        subtitle: '点击后，将相机对准您的目标图片。',
+        starting: '启动中…',
+        swipe:    '← 滑动浏览视频 →'
+      },
+      // ── Chinese Traditional ──
+      'zh-TW': {
+        start:    '點擊開始 AR',
+        subtitle: '點擊後，將相機對準您的目標圖片。',
+        starting: '啟動中…',
+        swipe:    '← 滑動瀏覽影片 →'
+      },
+      // ── Malay ──
+      ms: {
+        start:    'Ketuk untuk Mulakan AR',
+        subtitle: 'Selepas mengetuk, arahkan\nkamera ke foto sasaran anda.',
+        starting: 'Sedang memulakan…',
+        swipe:    '← Leret untuk semak video →'
+      },
+      // ── Tamil ──
+      ta: {
+        start:    'AR தொடங்க தட்டவும்',
+        subtitle: 'தட்டிய பிறகு, கேமராவை இலக்கு படத்தில் செலுத்துங்கள்.',
+        starting: 'தொடங்குகிறது…',
+        swipe:    '← வீடியோக்களை ஸ்வைப் செய்யுங்கள் →'
+      },
+      // ── Indonesian ──
+      id: {
+        start:    'Ketuk untuk Mulai AR',
+        subtitle: 'Setelah mengetuk, arahkan\nkamera ke foto target.',
+        starting: 'Memulai…',
+        swipe:    '← Geser untuk lihat video →'
+      },
+      // ── Japanese ──
+      ja: {
+        start:    'タップしてARを開始',
+        subtitle: 'タップ後、カメラをターゲット写真に向けてください。',
+        starting: '起動中…',
+        swipe:    '← スワイプして動画を見る →'
+      },
+      // ── Korean ──
+      ko: {
+        start:    'AR을 시작하려면 탭하세요',
+        subtitle: '탭한 후 카메라를 대상 사진에 향하세요.',
+        starting: '시작 중…',
+        swipe:    '← 스와이프하여 동영상 탐색 →'
+      },
+      // ── Thai ──
+      th: {
+        start:    'แตะเพื่อเริ่ม AR',
+        subtitle: 'หลังจากแตะ ชี้กล้องไปที่รูปเป้าหมาย',
+        starting: 'กำลังเริ่ม…',
+        swipe:    '← เลื่อนเพื่อดูวิดีโอ →'
+      },
+      // ── Arabic (RTL) ──
+      ar: {
+        start:    'اضغط لبدء AR',
+        subtitle: 'بعد الضغط، وجّه الكاميرا نحو الصورة المستهدفة.',
+        starting: 'جارٍ البدء…',
+        swipe:    '→ اسحب للتصفح ←',
+        rtl: true
+      },
+      // ── French ──
+      fr: {
+        start:    'Appuyer pour démarrer AR',
+        subtitle: 'Après avoir appuyé, pointez\nla caméra vers la photo cible.',
+        starting: 'Démarrage…',
+        swipe:    '← Glisser pour parcourir les vidéos →'
+      },
+      // ── Spanish ──
+      es: {
+        start:    'Toca para iniciar AR',
+        subtitle: 'Después de tocar, apunta tu\ncámara a la foto objetivo.',
+        starting: 'Iniciando…',
+        swipe:    '← Desliza para explorar los videos →'
+      },
+      // ── German ──
+      de: {
+        start:    'Tippen zum AR starten',
+        subtitle: 'Nach dem Tippen, Kamera\nauf das Zielfoto richten.',
+        starting: 'Starte…',
+        swipe:    '← Wischen um Videos zu durchsuchen →'
+      },
+      // ── Portuguese ──
+      pt: {
+        start:    'Toque para iniciar AR',
+        subtitle: 'Após tocar, aponte sua\ncâmera para a foto alvo.',
+        starting: 'Iniciando…',
+        swipe:    '← Deslize para navegar nos vídeos →'
+      },
+      // ── Hindi ──
+      hi: {
+        start:    'AR शुरू करने के लिए टैप करें',
+        subtitle: 'टैप करने के बाद, कैमरे को लक्ष्य फ़ोटो की ओर करें।',
+        starting: 'शुरू हो रहा है…',
+        swipe:    '← वीडियो देखने के लिए स्वाइप करें →'
+      }
+    };
+
+    // Detect the best matching language from the browser/OS setting.
+    // Returns a key that exists in TRANSLATIONS (falls back to 'en').
+    function detectLanguage() {
+      var raw = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+      // Traditional Chinese must be checked before generic 'zh'.
+      if (raw === 'zh-tw' || raw === 'zh-hk' || raw.indexOf('hant') !== -1) return 'zh-TW';
+      if (raw.startsWith('zh')) return 'zh';
+      var base = raw.substring(0, 2);
+      return TRANSLATIONS[base] ? base : 'en';
+    }
+
+    // Apply translations to all UI text elements.
+    // Returns the active translation object so callers can reuse strings
+    // (e.g. the "Starting…" label used by the button click handler).
+    function applyTranslations() {
+      var lang = detectLanguage();
+      var t    = TRANSLATIONS[lang];
+
+      document.getElementById('start-btn').textContent = t.start;
+
+      // subtitle uses '\n' for the line break inside the <p> tag
+      var p = document.querySelector('#loading p');
+      p.innerHTML = t.subtitle.replace('\n', '<br>');
+
+      document.getElementById('swipe-hint').textContent = t.swipe;
+
+      // RTL layout for Arabic
+      if (t.rtl) {
+        document.getElementById('loading').setAttribute('dir', 'rtl');
+      }
+
+      return t; // returned so the start-button handler can use t.starting
+    }
+
+
+    // ============================================================
     // STARTUP
     // ============================================================
     window.addEventListener('DOMContentLoaded', function () {
@@ -178,6 +303,9 @@
       const loadingEl = document.getElementById('loading');
       const hintEl    = document.getElementById('swipe-hint');
       const dotEl     = document.getElementById('dot-indicator');
+
+      // Apply language immediately — before anything else is shown.
+      var t = applyTranslations();
 
       // Capture AR system once A-Frame is ready, but don't start yet.
       // We wait for the user's tap so iOS accepts audio + camera together.
@@ -239,38 +367,65 @@
       // ============================================================
       // 3D INDICATOR ELEMENTS
       // ============================================================
-      const deckCard1   = document.getElementById('deck-card-1');
-      const deckCard2   = document.getElementById('deck-card-2');
-      const arrowLeft   = document.getElementById('arrow-left');
-      const arrowRight  = document.getElementById('arrow-right');
+      const arrowLeft  = document.getElementById('arrow-left');
+      const arrowRight = document.getElementById('arrow-right');
 
-      // Show or hide all 3D depth/navigation indicators together.
+      // Show or hide the floating navigation arrows.
       function setIndicatorsVisible(show) {
-        deckCard1.setAttribute('visible', show);
-        deckCard2.setAttribute('visible', show);
         arrowLeft.setAttribute('visible', show);
         arrowRight.setAttribute('visible', show);
       }
 
 
       // ============================================================
-      // LAYOUT UPDATE
+      // LAYOUT UPDATE — 3D video deck
       // ============================================================
-      // Shows only the active plane at the centre position.
-      // Updates deck cards' height to match the active video.
-      // Refreshes the dot indicator.
+      // Always shows 3 video planes at once:
+      //   prev  — behind-left,  angled away on Y axis, slightly smaller
+      //   active — centre front, full size, no rotation
+      //   next  — behind-right, angled away on Y axis, slightly smaller
+      //
+      // The prev/next planes show their paused first frame, acting as
+      // visible video thumbnails that form the "deck" depth effect.
+      // All other planes are fully hidden and reset.
       function updateLayout() {
-        // Hide all planes, then show only the active one.
-        planes.forEach(function (p) { p.setAttribute('visible', false); });
-        planes[currentIndex].setAttribute('position', '0 0.7 0');
-        planes[currentIndex].setAttribute('height', getPlaneHeight(currentIndex));
-        planes[currentIndex].setAttribute('visible', true);
+        var prevIdx = (currentIndex - 1 + VIDEO_COUNT) % VIDEO_COUNT;
+        var nextIdx = (currentIndex + 1) % VIDEO_COUNT;
 
-        // Resize the deck cards to match the active video's aspect ratio
-        // so the "stack" looks proportionally correct.
-        var h = getPlaneHeight(currentIndex);
-        deckCard1.setAttribute('height', h);
-        deckCard2.setAttribute('height', h);
+        // Reset every plane to a clean hidden state first.
+        planes.forEach(function (p) {
+          p.setAttribute('visible', false);
+          p.setAttribute('scale',    '1 1 1');
+          p.setAttribute('rotation', '0 0 0');
+          p.setAttribute('opacity',  '1');
+        });
+
+        // ── Previous video — left deck card ──────────────────────
+        // Positioned behind-left with a positive Y rotation so the
+        // left edge appears further from the viewer (classic 3D card angle).
+        planes[prevIdx].setAttribute('position', '-0.18 0.66 -0.05');
+        planes[prevIdx].setAttribute('height',   getPlaneHeight(prevIdx));
+        planes[prevIdx].setAttribute('scale',    '0.82 0.82 1');
+        planes[prevIdx].setAttribute('rotation', '0 20 3');
+        planes[prevIdx].setAttribute('opacity',  '0.75');
+        planes[prevIdx].setAttribute('visible',  true);
+
+        // ── Active video — centre front ───────────────────────────
+        planes[currentIndex].setAttribute('position', '0 0.7 0');
+        planes[currentIndex].setAttribute('height',   getPlaneHeight(currentIndex));
+        planes[currentIndex].setAttribute('scale',    '1 1 1');
+        planes[currentIndex].setAttribute('rotation', '0 0 0');
+        planes[currentIndex].setAttribute('opacity',  '1');
+        planes[currentIndex].setAttribute('visible',  true);
+
+        // ── Next video — right deck card ──────────────────────────
+        // Negative Y rotation angles the right edge away from the viewer.
+        planes[nextIdx].setAttribute('position', '0.18 0.66 -0.05');
+        planes[nextIdx].setAttribute('height',   getPlaneHeight(nextIdx));
+        planes[nextIdx].setAttribute('scale',    '0.82 0.82 1');
+        planes[nextIdx].setAttribute('rotation', '0 -20 -3');
+        planes[nextIdx].setAttribute('opacity',  '0.75');
+        planes[nextIdx].setAttribute('visible',  true);
 
         // Highlight the correct dot.
         dots.forEach(function (d, i) {
@@ -289,7 +444,7 @@
       const startBtn = document.getElementById('start-btn');
       startBtn.addEventListener('click', function () {
         startBtn.disabled = true;
-        startBtn.textContent = 'Starting…';
+        startBtn.textContent = t.starting; // translated "Starting…"
 
         // Unlock all videos while still muted.
         videos.forEach(function (v) {
