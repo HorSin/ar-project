@@ -159,6 +159,55 @@
 
   <script>
     // ============================================================
+    // BILLBOARD COMPONENT
+    // ============================================================
+    // Makes the active video plane face the camera every frame,
+    // independent of how the target image is angled.
+    //
+    // A-Frame's built-in look-at can lag by one frame and doesn't
+    // always correctly invert the mindar-image-target parent transform.
+    // This component recomputes the correct local quaternion each tick
+    // so the plane's front (+Z) always points straight at the camera.
+    AFRAME.registerComponent('billboard', {
+      init: function () {
+        // Pre-allocate Three.js objects to avoid per-frame GC pressure.
+        this._camPos   = new THREE.Vector3();
+        this._myPos    = new THREE.Vector3();
+        this._dir      = new THREE.Vector3();
+        this._worldQ   = new THREE.Quaternion();
+        this._parentQ  = new THREE.Quaternion();
+        this._zAxis    = new THREE.Vector3(0, 0, 1);
+      },
+      tick: function () {
+        var camera = this.el.sceneEl.camera;
+        if (!camera) return;
+
+        // World position of the camera and of this plane.
+        camera.getWorldPosition(this._camPos);
+        this.el.object3D.getWorldPosition(this._myPos);
+
+        // Direction from plane to camera (world space).
+        this._dir.copy(this._camPos).sub(this._myPos);
+        if (this._dir.lengthSq() < 0.0001) return; // guard: too close
+        this._dir.normalize();
+
+        // World quaternion that rotates +Z to face the camera.
+        this._worldQ.setFromUnitVectors(this._zAxis, this._dir);
+
+        // Convert to the plane's local space by pre-multiplying
+        // with the inverse of the parent's world quaternion.
+        this.el.object3D.parent.getWorldQuaternion(this._parentQ);
+        this._parentQ.invert();
+        this._parentQ.multiply(this._worldQ);
+
+        // Apply — this directly sets the Three.js quaternion, bypassing
+        // A-Frame's attribute system to avoid a one-frame lag.
+        this.el.object3D.quaternion.copy(this._parentQ);
+      }
+    });
+
+
+    // ============================================================
     // CAROUSEL CONFIGURATION
     // ============================================================
     const VIDEO_COUNT      = 5;   // update if you add or remove videos
@@ -486,9 +535,9 @@
           applySlot(plane, getSlotIndex(i), false, isCenter, getPlaneHeight(i));
           plane.setAttribute('visible', true);
           if (isCenter) {
-            plane.setAttribute('look-at', '[camera]');
+            plane.setAttribute('billboard', '');
           } else {
-            plane.removeAttribute('look-at');
+            plane.removeAttribute('billboard');
           }
         });
         dots.forEach(function (d, i) {
@@ -499,7 +548,7 @@
       // Cancel all in-progress animations and hide every plane.
       function resetAllPlanes() {
         planes.forEach(function (p) {
-          p.removeAttribute('look-at');
+          p.removeAttribute('billboard');
           p.removeAttribute('animation__pos');
           p.removeAttribute('animation__rot');
           p.removeAttribute('animation__scale');
@@ -582,7 +631,7 @@
           var isCenter = (i === currentIndex);
           applySlot(plane, getSlotIndex(i), true, isCenter, getPlaneHeight(i));
           if (isCenter) {
-            plane.setAttribute('look-at', '[camera]');
+            plane.setAttribute('billboard', '');
           }
         });
 
