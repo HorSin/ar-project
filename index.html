@@ -23,14 +23,26 @@
        from firing during horizontal swipes on the AR canvas. */
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
 
-    /* A friendly message shown while the camera is starting up. */
+    /* Full-screen overlay shown on launch. Acts as both the start gate
+       and the iOS media-unlock trigger (video must be touched by a real
+       user gesture before Safari will let it play). */
     #loading {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 32px;
       background: #000; color: #fff; font-family: sans-serif;
-      font-size: 18px; text-align: center; z-index: 9999; padding: 24px;
+      text-align: center; z-index: 9999; padding: 24px;
       box-sizing: border-box;
     }
+    #loading p { margin: 0; font-size: 16px; opacity: 0.7; line-height: 1.5; }
+    /* The tap-to-start button that doubles as the iOS media-unlock gesture. */
+    #start-btn {
+      background: #fff; color: #000; border: none;
+      padding: 16px 48px; font-size: 20px; font-weight: bold;
+      border-radius: 50px; font-family: sans-serif; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #start-btn:disabled { opacity: 0.5; }
 
     /* Swipe hint shown briefly after the AR target is first found. */
     #swipe-hint {
@@ -45,8 +57,13 @@
 </head>
 
 <body>
-  <!-- Shown until the camera + tracker are ready, then hidden by the script below. -->
-  <div id="loading">Starting camera… point it at your target photo 📸</div>
+  <!-- Start-gate overlay. The button tap is the iOS media-unlock gesture.
+       Without this user-initiated tap, Safari will silently refuse to play
+       any video, leaving a black rectangle on the AR plane. -->
+  <div id="loading">
+    <button id="start-btn">Tap to Start AR</button>
+    <p>Point your camera at<br>your target photo after tapping.</p>
+  </div>
 
   <!-- Brief swipe hint shown after first target detection. -->
   <div id="swipe-hint">← Swipe to browse videos →</div>
@@ -68,7 +85,9 @@
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <a-assets>
+    <!-- timeout="30000": give mobile browsers 30s to buffer all 5 videos
+         before A-Frame declares the assets failed (default is only 3s). -->
+    <a-assets timeout="30000">
       <!--
         ============================================================
         VIDEO CAROUSEL ASSETS
@@ -207,15 +226,51 @@
       const loadingEl = document.getElementById('loading');
       const hintEl    = document.getElementById('swipe-hint');
 
-      // ---- Start MindAR once A-Frame has fully loaded ----
+      // ---- Capture the AR system reference once A-Frame is loaded ----
+      // We do NOT start it yet — we wait for the user's tap so that
+      // iOS will also allow video playback (same gesture, same context).
+      let arSystem = null;
       sceneEl.addEventListener('loaded', function () {
-        const arSystem = sceneEl.systems['mindar-image-system'];
-        arSystem.start(); // turns on the camera and starts tracking
+        arSystem = sceneEl.systems['mindar-image-system'];
       });
 
       // ---- Hide the loading overlay once the camera is running ----
       sceneEl.addEventListener('arReady', function () {
         loadingEl.style.display = 'none';
+      });
+
+      // ============================================================
+      // TAP-TO-START  —  iOS VIDEO UNLOCK
+      // ============================================================
+      // iOS Safari requires that video.play() be called synchronously
+      // inside a user-gesture handler (touch / click) the FIRST time.
+      // We play-then-immediately-pause all 5 videos here so Safari marks
+      // them as "user-approved". After this, every subsequent .play()
+      // call (from targetFound, switchVideo, etc.) will work without
+      // needing another gesture.
+      const startBtn = document.getElementById('start-btn');
+      startBtn.addEventListener('click', function () {
+        // Disable the button immediately to prevent double-taps.
+        startBtn.disabled = true;
+        startBtn.textContent = 'Starting…';
+
+        // iOS unlock: touch every video inside this user-gesture handler.
+        videos.forEach(function (v) {
+          v.play().catch(function () {}); // play() returns a Promise on modern browsers
+          v.pause();
+          v.currentTime = 0;
+        });
+
+        // Now start the AR camera. The camera itself also benefits from
+        // being triggered inside a user gesture on some iOS versions.
+        if (arSystem) {
+          arSystem.start();
+        } else {
+          // A-Frame hasn't fired 'loaded' yet — wait for it, then start.
+          sceneEl.addEventListener('loaded', function () {
+            sceneEl.systems['mindar-image-system'].start();
+          });
+        }
       });
 
 
