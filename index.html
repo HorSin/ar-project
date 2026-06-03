@@ -94,8 +94,10 @@
         ============================================================
         Add one <video> per carousel slide.
         - Replace the src filenames with your own .mp4 files.
-        - All must be in the same folder as index.html.
-        - muted + playsinline are REQUIRED for autoplay on iOS/Android.
+        - All files must be in the SAME FOLDER as index.html.
+        - playsinline is REQUIRED for iOS/Android — keep it on every tag.
+        - Audio is ON (no muted attribute). The "Tap to Start" button
+          unlocks audio on iOS. Do NOT add muted back or audio will be lost.
         - preload="auto" asks the browser to buffer all videos up front
           so swipe transitions feel instant.
 
@@ -106,11 +108,11 @@
         the browser to fire the 'ended' event so the carousel can
         auto-advance to the next slide when a video finishes playing.
       -->
-      <video id="video-0" src="video1.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
-      <video id="video-1" src="video2.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
-      <video id="video-2" src="video3.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
-      <video id="video-3" src="video4.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
-      <video id="video-4" src="video5.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
+      <video id="video-0" src="video1.mp4"  playsinline webkit-playsinline preload="auto"></video>
+      <video id="video-1" src="video2.mp4"  playsinline webkit-playsinline preload="auto"></video>
+      <video id="video-2" src="video3.mp4"  playsinline webkit-playsinline preload="auto"></video>
+      <video id="video-3" src="video4.mp4"  playsinline webkit-playsinline preload="auto"></video>
+      <video id="video-4" src="video5.mp4"  playsinline webkit-playsinline preload="auto"></video>
     </a-assets>
 
     <!-- A camera is required. Leave these settings as-is. -->
@@ -131,22 +133,6 @@
     -->
     <a-entity mindar-image-target="targetIndex: 0">
 
-      <!-- ===== PLACEHOLDER A: A SIMPLE 2D IMAGE OVERLAY ===== -->
-      <!--
-        Shows an image floating over the photo.
-        Replace the src with your own picture (PNG with transparency
-        looks best). Put that file in the same folder and change the name.
-        Remove this <a-image> line if you only want the video carousel.
-      -->
-      <a-image
-        src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
-        position="0 0 0"
-        height="0.552"
-        width="1"
-        rotation="0 0 0"
-        opacity="0.9">
-      </a-image>
-
       <!-- ===== VIDEO CAROUSEL PLANES ===== -->
       <!--
         All five planes sit at the EXACT same 3D position. Only the
@@ -165,7 +151,7 @@
         width="1"
         height="0.5625"
         position="0 0.7 0"
-        visible="true">
+        visible="false">
       </a-video>
 
       <a-video
@@ -217,6 +203,12 @@
     // Minimum horizontal distance (px) a touch must travel to count as a swipe.
     const SWIPE_THRESHOLD = 50;
 
+    // Horizontal distance (AR units) between plane centres for the peek effect.
+    // The active plane sits at x=0; neighbours sit at ±PEEK_OFFSET.
+    // With width=1 and PEEK_OFFSET=1.1 there is a 0.1-unit gap between planes,
+    // and roughly half of each neighbour sticks out past the target's edge.
+    const PEEK_OFFSET = 1.1;
+
 
     // ============================================================
     // START THE CAMERA AFTER THE PAGE IS READY
@@ -255,8 +247,10 @@
         startBtn.textContent = 'Starting…';
 
         // iOS unlock: touch every video inside this user-gesture handler.
+        // Setting muted=false before play() is what tells iOS to allow audio.
         videos.forEach(function (v) {
-          v.play().catch(function () {}); // play() returns a Promise on modern browsers
+          v.muted = false;
+          v.play().catch(function () {});
           v.pause();
           v.currentTime = 0;
         });
@@ -300,6 +294,58 @@
 
 
       // ============================================================
+      // DYNAMIC ASPECT RATIOS
+      // ============================================================
+      // Pre-filled with 16:9 as a safe default. Each slot is overwritten
+      // as soon as the browser has parsed that video's metadata.
+      const aspectRatios = [16/9, 16/9, 16/9, 16/9, 16/9];
+
+      videos.forEach(function (vid, i) {
+        vid.addEventListener('loadedmetadata', function () {
+          if (vid.videoWidth && vid.videoHeight) {
+            aspectRatios[i] = vid.videoWidth / vid.videoHeight;
+          }
+        });
+      });
+
+      // Returns the A-Frame height for a given video index.
+      // All planes use width="1", so height = 1 / aspectRatio.
+      function getPlaneHeight(index) {
+        return 1 / aspectRatios[index];
+      }
+
+
+      // ============================================================
+      // LAYOUT UPDATE — positions + visibility for peek carousel
+      // ============================================================
+      // Called on targetFound and every switchVideo.
+      // Shows exactly 3 planes at a time: prev (left peek), current
+      // (centre), and next (right peek). All others are hidden.
+      function updateLayout() {
+        var prevIdx = (currentIndex - 1 + VIDEO_COUNT) % VIDEO_COUNT;
+        var nextIdx = (currentIndex + 1) % VIDEO_COUNT;
+
+        // Hide everything first, then selectively show 3.
+        planes.forEach(function (p) { p.setAttribute('visible', false); });
+
+        // Previous video — peeking in from the left
+        planes[prevIdx].setAttribute('position', (-PEEK_OFFSET) + ' 0.7 0');
+        planes[prevIdx].setAttribute('height', getPlaneHeight(prevIdx));
+        planes[prevIdx].setAttribute('visible', true);
+
+        // Active video — centred over the target
+        planes[currentIndex].setAttribute('position', '0 0.7 0');
+        planes[currentIndex].setAttribute('height', getPlaneHeight(currentIndex));
+        planes[currentIndex].setAttribute('visible', true);
+
+        // Next video — peeking in from the right
+        planes[nextIdx].setAttribute('position', PEEK_OFFSET + ' 0.7 0');
+        planes[nextIdx].setAttribute('height', getPlaneHeight(nextIdx));
+        planes[nextIdx].setAttribute('visible', true);
+      }
+
+
+      // ============================================================
       // AUTO-ADVANCE PLAYLIST
       // ============================================================
       // Each video fires 'ended' when it plays to the end (only possible
@@ -321,21 +367,19 @@
       // direction: +1 = next (swipe left), -1 = previous (swipe right)
       function switchVideo(direction) {
         // Guard: do nothing if the marker is not currently visible.
-        // This prevents phantom swipes from queuing up off-screen.
         if (!isMarkerVisible) return;
 
-        const oldIndex = currentIndex;
+        // Pause and rewind the outgoing video.
+        videos[currentIndex].pause();
+        videos[currentIndex].currentTime = 0;
+
+        // Advance the index (wraps around seamlessly).
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
 
-        // Hide, pause, and rewind the outgoing slide.
-        // Resetting currentTime ensures a clean restart if the user
-        // swipes back to this video later.
-        planes[oldIndex].setAttribute('visible', false);
-        videos[oldIndex].pause();
-        videos[oldIndex].currentTime = 0;
+        // Reposition all planes and make the right 3 visible.
+        updateLayout();
 
-        // Show and play the incoming slide.
-        planes[currentIndex].setAttribute('visible', true);
+        // Play the new active video.
         videos[currentIndex].play();
       }
 
@@ -345,9 +389,10 @@
       // ============================================================
       const target = document.querySelector('[mindar-image-target]');
 
-      // Image target found: resume the currently active video.
+      // Image target found: position all planes, then play the active video.
       target.addEventListener('targetFound', function () {
         isMarkerVisible = true;
+        updateLayout();                    // sets positions + visibility for all 3 slots
         videos[currentIndex].play();
 
         // Show the swipe hint the very first time the target is detected.
