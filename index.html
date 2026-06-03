@@ -454,7 +454,11 @@
           if (!skipRotation) {
             plane.setAttribute('animation__rot', { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           } else {
+            // Center plane: cancel any rotation animation and snap to
+            // face-forward (0 0 0) immediately so there is no residual
+            // tilt from the previous side-slot before look-at kicks in.
             plane.removeAttribute('animation__rot');
+            plane.setAttribute('rotation', '0 0 0');
           }
           if (height !== undefined) {
             // Animate height so aspect-ratio corrections zoom smoothly with scale.
@@ -465,6 +469,8 @@
           plane.setAttribute('scale',    scaStr);
           if (!skipRotation) {
             plane.setAttribute('rotation', rotStr);
+          } else {
+            plane.setAttribute('rotation', '0 0 0');
           }
           if (height !== undefined) {
             plane.setAttribute('height', height);
