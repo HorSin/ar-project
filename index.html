@@ -325,6 +325,7 @@
       let currentIndex    = 0;
       let isMarkerVisible = false;
       let hintShown       = false;
+      let isAnimating     = false; // blocks swipes during a flip transition
 
       const videos = [
         document.getElementById('video-0'),
@@ -378,56 +379,28 @@
 
 
       // ============================================================
-      // LAYOUT UPDATE — 3D video deck
+      // HELPERS
       // ============================================================
-      // Always shows 3 video planes at once:
-      //   prev  — behind-left,  angled away on Y axis, slightly smaller
-      //   active — centre front, full size, no rotation
-      //   next  — behind-right, angled away on Y axis, slightly smaller
-      //
-      // The prev/next planes show their paused first frame, acting as
-      // visible video thumbnails that form the "deck" depth effect.
-      // All other planes are fully hidden and reset.
-      function updateLayout() {
-        var prevIdx = (currentIndex - 1 + VIDEO_COUNT) % VIDEO_COUNT;
-        var nextIdx = (currentIndex + 1) % VIDEO_COUNT;
 
-        // Reset every plane to a clean hidden state first.
+      // Resets every plane to a clean, hidden, zero-rotation state.
+      // Call this before showing or animating any plane.
+      function resetAllPlanes() {
         planes.forEach(function (p) {
-          p.setAttribute('visible', false);
-          p.setAttribute('scale',    '1 1 1');
+          p.removeAttribute('animation__flipout');
+          p.removeAttribute('animation__flipin');
           p.setAttribute('rotation', '0 0 0');
+          p.setAttribute('scale',    '1 1 1');
           p.setAttribute('opacity',  '1');
+          p.setAttribute('visible',  false);
         });
+      }
 
-        // ── Previous video — left deck card ──────────────────────
-        // Positioned behind-left with a positive Y rotation so the
-        // left edge appears further from the viewer (classic 3D card angle).
-        planes[prevIdx].setAttribute('position', '-0.18 0.66 -0.05');
-        planes[prevIdx].setAttribute('height',   getPlaneHeight(prevIdx));
-        planes[prevIdx].setAttribute('scale',    '0.82 0.82 1');
-        planes[prevIdx].setAttribute('rotation', '0 20 3');
-        planes[prevIdx].setAttribute('opacity',  '0.75');
-        planes[prevIdx].setAttribute('visible',  true);
-
-        // ── Active video — centre front ───────────────────────────
+      // Show the active plane at rest position. No animation.
+      function showActivePlane() {
         planes[currentIndex].setAttribute('position', '0 0.7 0');
         planes[currentIndex].setAttribute('height',   getPlaneHeight(currentIndex));
-        planes[currentIndex].setAttribute('scale',    '1 1 1');
         planes[currentIndex].setAttribute('rotation', '0 0 0');
-        planes[currentIndex].setAttribute('opacity',  '1');
         planes[currentIndex].setAttribute('visible',  true);
-
-        // ── Next video — right deck card ──────────────────────────
-        // Negative Y rotation angles the right edge away from the viewer.
-        planes[nextIdx].setAttribute('position', '0.18 0.66 -0.05');
-        planes[nextIdx].setAttribute('height',   getPlaneHeight(nextIdx));
-        planes[nextIdx].setAttribute('scale',    '0.82 0.82 1');
-        planes[nextIdx].setAttribute('rotation', '0 -20 -3');
-        planes[nextIdx].setAttribute('opacity',  '0.75');
-        planes[nextIdx].setAttribute('visible',  true);
-
-        // Highlight the correct dot.
         dots.forEach(function (d, i) {
           d.classList.toggle('active', i === currentIndex);
         });
@@ -477,24 +450,73 @@
 
 
       // ============================================================
-      // SWITCH VIDEO
+      // SWITCH VIDEO — 3D flip transition
       // ============================================================
-      // direction: +1 = next (swipe left), -1 = previous (swipe right)
+      // Swipe left  (+1): current flips to the LEFT  (rotY → -90°),
+      //                   new video flips IN from the RIGHT (+90° → 0°).
+      // Swipe right (-1): current flips to the RIGHT (rotY → +90°),
+      //                   new video flips IN from the LEFT  (-90° → 0°).
+      //
+      // isAnimating blocks overlapping swipes until the flip completes.
+      var FLIP_MS = 280; // duration of each half (flip-out and flip-in), ms
+
       function switchVideo(direction) {
-        if (!isMarkerVisible) return;
+        if (!isMarkerVisible || isAnimating) return;
+        isAnimating = true;
 
-        // Pause and rewind the outgoing video.
-        videos[currentIndex].pause();
-        videos[currentIndex].currentTime = 0;
+        var oldIndex   = currentIndex;
+        var newIndex   = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
+        var flipOutTo  = direction > 0 ? '0 -90 0' : '0 90 0';
+        var flipInFrom = direction > 0 ? '0 90 0'  : '0 -90 0';
 
-        currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
+        // ── Phase 1: animate current plane flipping out ──────────
+        planes[oldIndex].setAttribute('animation__flipout', {
+          property: 'rotation',
+          to:       flipOutTo,
+          dur:      FLIP_MS,
+          easing:   'easeInCubic'
+        });
 
-        updateLayout();
+        setTimeout(function () {
+          // ── Between phases: hide old, set up new ─────────────
+          videos[oldIndex].pause();
+          videos[oldIndex].currentTime = 0;
+          planes[oldIndex].setAttribute('visible',  false);
+          planes[oldIndex].setAttribute('rotation', '0 0 0');
+          planes[oldIndex].removeAttribute('animation__flipout');
 
-        // Unmute right before playing — this is the two-step iOS audio pattern:
-        // unlock (muted) in the gesture handler, then unmute here for real play.
-        videos[currentIndex].muted = false;
-        videos[currentIndex].play();
+          currentIndex = newIndex;
+
+          // Position new plane at the edge it enters from.
+          planes[currentIndex].setAttribute('position', '0 0.7 0');
+          planes[currentIndex].setAttribute('height',   getPlaneHeight(currentIndex));
+          planes[currentIndex].setAttribute('rotation', flipInFrom);
+          planes[currentIndex].setAttribute('visible',  true);
+
+          // Update dot indicator.
+          dots.forEach(function (d, i) {
+            d.classList.toggle('active', i === currentIndex);
+          });
+
+          // ── Phase 2: animate new plane flipping in ────────────
+          planes[currentIndex].setAttribute('animation__flipin', {
+            property: 'rotation',
+            to:       '0 0 0',
+            dur:      FLIP_MS,
+            easing:   'easeOutCubic'
+          });
+
+          // Start audio on the new video.
+          videos[currentIndex].muted = false;
+          videos[currentIndex].play();
+
+          // Unlock swipes once flip-in completes.
+          setTimeout(function () {
+            planes[currentIndex].removeAttribute('animation__flipin');
+            isAnimating = false;
+          }, FLIP_MS + 20);
+
+        }, FLIP_MS + 10); // wait for flip-out to finish
       }
 
 
@@ -505,15 +527,17 @@
 
       target.addEventListener('targetFound', function () {
         isMarkerVisible = true;
-        updateLayout();
+        isAnimating     = false; // clear any in-progress flip from a previous session
+
+        // Show the active plane cleanly — no flip animation on first appearance.
+        resetAllPlanes();
+        showActivePlane();
         setIndicatorsVisible(true);
         dotEl.classList.add('visible');
 
-        // Unmute + play the active video.
         videos[currentIndex].muted = false;
         videos[currentIndex].play();
 
-        // Show swipe hint once on first detection.
         if (!hintShown) {
           hintShown = true;
           hintEl.classList.add('visible');
@@ -523,7 +547,11 @@
 
       target.addEventListener('targetLost', function () {
         isMarkerVisible = false;
+        isAnimating     = false; // cancel any in-progress flip
         videos[currentIndex].pause();
+
+        // Reset all planes so no half-rotated plane lingers.
+        resetAllPlanes();
         setIndicatorsVisible(false);
         dotEl.classList.remove('visible');
       });
