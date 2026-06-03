@@ -116,11 +116,11 @@
         JavaScript animates ALL planes simultaneously on every swipe.
 
         Slot table (COVERFLOW_SLOTS in script):
-          Slot 0 (far-left):  x=-1.25  z=-0.22  rotY=+65°  scale=0.48
-          Slot 1 (left):      x=-0.72  z=-0.07  rotY=+38°  scale=0.65
+          Slot 0 (far-left):  x=-1.00  z=-0.20  rotY=+65°  scale=0.22
+          Slot 1 (left):      x=-0.65  z=-0.06  rotY=+38°  scale=0.32
           Slot 2 (center):    x=  0    z=+0.02  rotY=  0°  scale=1.00  ← active (full size)
-          Slot 3 (right):     x=+0.72  z=-0.07  rotY=-38°  scale=0.65
-          Slot 4 (far-right): x=+1.25  z=-0.22  rotY=-65°  scale=0.48
+          Slot 3 (right):     x=+0.65  z=-0.06  rotY=-38°  scale=0.32
+          Slot 4 (far-right): x=+1.00  z=-0.20  rotY=-65°  scale=0.22
 
         Initial mapping (currentIndex=0):
           plane-0  rel=0 → slot 2 (center)
@@ -134,21 +134,21 @@
       <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
         position="0 0.7 0.02" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
 
-      <!-- plane-1: slot 3 — right -->
+      <!-- plane-1: slot 3 — right (thumbnail) -->
       <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-        position="0.72 0.7 -0.07" scale="0.65 0.65 0.65" rotation="0 -38 0" visible="false"></a-video>
+        position="0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 -38 0" visible="false"></a-video>
 
-      <!-- plane-2: slot 4 — far-right -->
+      <!-- plane-2: slot 4 — far-right (thumbnail) -->
       <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-        position="1.25 0.7 -0.22" scale="0.48 0.48 0.48" rotation="0 -65 0" visible="false"></a-video>
+        position="1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 -65 0" visible="false"></a-video>
 
-      <!-- plane-3: slot 0 — far-left -->
+      <!-- plane-3: slot 0 — far-left (thumbnail) -->
       <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-        position="-1.25 0.7 -0.22" scale="0.48 0.48 0.48" rotation="0 65 0" visible="false"></a-video>
+        position="-1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 65 0" visible="false"></a-video>
 
-      <!-- plane-4: slot 1 — left -->
+      <!-- plane-4: slot 1 — left (thumbnail) -->
       <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-        position="-0.72 0.7 -0.07" scale="0.65 0.65 0.65" rotation="0 38 0" visible="false"></a-video>
+        position="-0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 38 0" visible="false"></a-video>
 
     </a-entity>
   </a-scene>
@@ -414,11 +414,11 @@
       // To resize: edit sx (scale). To adjust spread: edit x. To adjust
       // depth curve: edit z (more negative = rounder). To adjust tilt: edit ry.
       var COVERFLOW_SLOTS = [
-        { x: -1.25, z: -0.22, ry:  65, sx: 0.48 }, // 0: far-left
-        { x: -0.72, z: -0.07, ry:  38, sx: 0.65 }, // 1: left
-        { x:  0,    z:  0.02, ry:   0, sx: 1.00 }, // 2: center (full size)
-        { x:  0.72, z: -0.07, ry: -38, sx: 0.65 }, // 3: right
-        { x:  1.25, z: -0.22, ry: -65, sx: 0.48 }, // 4: far-right
+        { x: -1.00, z: -0.20, ry:  65, sx: 0.22 }, // 0: far-left   (small thumbnail)
+        { x: -0.65, z: -0.06, ry:  38, sx: 0.32 }, // 1: left        (small thumbnail)
+        { x:  0,    z:  0.02, ry:   0, sx: 1.00 }, // 2: center      (full target width)
+        { x:  0.65, z: -0.06, ry: -38, sx: 0.32 }, // 3: right       (small thumbnail)
+        { x:  1.00, z: -0.20, ry: -65, sx: 0.22 }, // 4: far-right   (small thumbnail)
       ];
 
       // Maps a video index to its current slot (0–4).
