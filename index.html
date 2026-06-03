@@ -130,9 +130,9 @@
           plane-4  rel=4 → slot 1 (left)
       -->
 
-      <!-- plane-0: slot 2 — center (active) -->
+      <!-- plane-0: slot 2 — center (active), z=0.02 pops it in front -->
       <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
-        position="0 0.7 0" scale="0.20 0.20 0.20" rotation="0 0 0" visible="false"></a-video>
+        position="0 0.7 0.02" scale="0.20 0.20 0.20" rotation="0 0 0" visible="false"></a-video>
 
       <!-- plane-1: slot 3 — right -->
       <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
@@ -413,7 +413,7 @@
       var COVERFLOW_SLOTS = [
         { x: -0.42, z: -0.06, ry:  35, sx: 0.12 }, // 0: far-left
         { x: -0.22, z: -0.03, ry:  20, sx: 0.15 }, // 1: left
-        { x:  0,    z:  0,    ry:   0, sx: 0.20 }, // 2: center (active)
+        { x:  0,    z:  0.02, ry:   0, sx: 0.20 }, // 2: center (active) — z=0.02 pops it in front
         { x:  0.22, z: -0.03, ry: -20, sx: 0.15 }, // 3: right
         { x:  0.42, z: -0.06, ry: -35, sx: 0.12 }, // 4: far-right
       ];
@@ -445,11 +445,21 @@
       }
 
       // Snap all planes to their current slots instantly and make them visible.
+      // The active (center) plane gets look-at so it always faces the camera.
+      // Side planes have look-at removed so their tilt angles are respected.
       function updateLayout() {
         planes.forEach(function (plane, i) {
           applySlot(plane, getSlotIndex(i), false);
           plane.setAttribute('height',  getPlaneHeight(i));
           plane.setAttribute('visible', true);
+          if (i === currentIndex) {
+            // look-at overrides the rotation every frame so the active
+            // video always faces the user, regardless of how the target
+            // image is angled relative to the camera.
+            plane.setAttribute('look-at', '[camera]');
+          } else {
+            plane.removeAttribute('look-at');
+          }
         });
         dots.forEach(function (d, i) {
           d.classList.toggle('active', i === currentIndex);
@@ -459,6 +469,7 @@
       // Cancel all in-progress animations and hide every plane.
       function resetAllPlanes() {
         planes.forEach(function (p) {
+          p.removeAttribute('look-at');
           p.removeAttribute('animation__pos');
           p.removeAttribute('animation__rot');
           p.removeAttribute('animation__scale');
@@ -519,9 +530,15 @@
         if (!isMarkerVisible || isAnimating) return;
         isAnimating = true;
 
-        // Pause and rewind the outgoing center video.
-        videos[currentIndex].pause();
-        videos[currentIndex].currentTime = 0;
+        var oldIndex = currentIndex;
+
+        // Remove look-at from the outgoing plane BEFORE animating it —
+        // look-at would fight the rotation animation otherwise.
+        planes[oldIndex].removeAttribute('look-at');
+
+        // Pause and rewind the outgoing video.
+        videos[oldIndex].pause();
+        videos[oldIndex].currentTime = 0;
 
         // Advance the active index.
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
@@ -540,8 +557,12 @@
         videos[currentIndex].muted = false;
         videos[currentIndex].play();
 
-        // Unlock swipes once all animations complete.
-        setTimeout(function () { isAnimating = false; }, ANIM_MS + 50);
+        // After animation: add look-at to the new center so it snaps
+        // to face the camera and stays there regardless of target angle.
+        setTimeout(function () {
+          planes[currentIndex].setAttribute('look-at', '[camera]');
+          isAnimating = false;
+        }, ANIM_MS + 50);
       }
 
 
