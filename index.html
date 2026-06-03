@@ -17,22 +17,11 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <script>
-    // Makes an element always rotate to face the camera (billboard effect).
-    AFRAME.registerComponent('billboard', {
-      tick: function () {
-        const cam = document.querySelector('a-camera');
-        if (!cam) return;
-        const camPos = new THREE.Vector3();
-        cam.object3D.getWorldPosition(camPos);
-        this.el.object3D.lookAt(camPos);
-      }
-    });
-  </script>
-
   <style>
     /* Make the AR view fill the whole screen with no scrollbars. */
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+    /* touch-action: none prevents iOS pull-to-refresh and Android back-swipe
+       from firing during horizontal swipes on the AR canvas. */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
 
     /* A friendly message shown while the camera is starting up. */
     #loading {
@@ -43,20 +32,24 @@
       box-sizing: border-box;
     }
 
-    #unmute-btn {
-      display: none;
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      padding: 12px 28px; background: rgba(0,0,0,0.65); color: #fff;
-      font-family: sans-serif; font-size: 16px; border: 2px solid #fff;
-      border-radius: 30px; cursor: pointer; z-index: 9999;
+    /* Swipe hint shown briefly after the AR target is first found. */
+    #swipe-hint {
+      position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.55); color: #fff; font-family: sans-serif;
+      font-size: 14px; padding: 8px 18px; border-radius: 20px;
+      pointer-events: none; z-index: 9998;
+      opacity: 0; transition: opacity 0.4s;
     }
+    #swipe-hint.visible { opacity: 1; }
   </style>
 </head>
 
 <body>
   <!-- Shown until the camera + tracker are ready, then hidden by the script below. -->
   <div id="loading">Starting camera… point it at your target photo 📸</div>
-  <button id="unmute-btn">🔊 Tap for Sound</button>
+
+  <!-- Brief swipe hint shown after first target detection. -->
+  <div id="swipe-hint">← Swipe to browse videos →</div>
 
   <!--
     ============================================================
@@ -69,7 +62,7 @@
     color-space, device-orientation, etc. are sensible defaults; leave them.
   -->
   <a-scene
-    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no;"
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;"
     color-space="sRGB"
     renderer="colorManagement: true, physicallyCorrectLights"
     vr-mode-ui="enabled: false"
@@ -77,11 +70,28 @@
 
     <a-assets>
       <!--
-        Replace "your-video.mp4" with the filename of your video.
-        Put the video file in the same folder as index.html.
-        muted is required for autoplay on iOS/Android.
+        ============================================================
+        VIDEO CAROUSEL ASSETS
+        ============================================================
+        Add one <video> per carousel slide.
+        - Replace the src filenames with your own .mp4 files.
+        - All must be in the same folder as index.html.
+        - muted + playsinline are REQUIRED for autoplay on iOS/Android.
+        - preload="auto" asks the browser to buffer all videos up front
+          so swipe transitions feel instant.
+
+        To add more slides: duplicate a <video> tag here AND add a
+        matching <a-video> plane in the scene below.
+
+        NOTE: 'loop' is intentionally OMITTED on all videos. This allows
+        the browser to fire the 'ended' event so the carousel can
+        auto-advance to the next slide when a video finishes playing.
       -->
-      <video id="ar-video" src="stitch.mp4" playsinline webkit-playsinline loop muted preload="auto"></video>
+      <video id="video-0" src="video1.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
+      <video id="video-1" src="video2.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
+      <video id="video-2" src="video3.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
+      <video id="video-3" src="video4.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
+      <video id="video-4" src="video5.mp4"  playsinline webkit-playsinline muted preload="auto"></video>
     </a-assets>
 
     <!-- A camera is required. Leave these settings as-is. -->
@@ -102,18 +112,77 @@
     -->
     <a-entity mindar-image-target="targetIndex: 0">
 
-      <!-- ===== FLOATING VIDEO ===== -->
+      <!-- ===== PLACEHOLDER A: A SIMPLE 2D IMAGE OVERLAY ===== -->
       <!--
-        Plays a video floating above the target photo.
-        width="1" matches the target width; height="0.5625" = 16:9 ratio.
-        Adjust position "0 0.7 0" to move it up/down/sideways.
+        Shows an image floating over the photo.
+        Replace the src with your own picture (PNG with transparency
+        looks best). Put that file in the same folder and change the name.
+        Remove this <a-image> line if you only want the video carousel.
+      -->
+      <a-image
+        src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
+        position="0 0 0"
+        height="0.552"
+        width="1"
+        rotation="0 0 0"
+        opacity="0.9">
+      </a-image>
+
+      <!-- ===== VIDEO CAROUSEL PLANES ===== -->
+      <!--
+        All five planes sit at the EXACT same 3D position. Only the
+        active one is visible at any time. The JavaScript below controls
+        which one is shown via the 'visible' attribute.
+
+        To change the video size or position, edit width/height/position
+        on ALL five planes so they stay in sync.
+
+        To add a 6th slide: add <a-video id="plane-5" src="#video-5" ...
+        visible="false"> here AND update VIDEO_COUNT in the script below.
       -->
       <a-video
-        src="#ar-video"
+        id="plane-0"
+        src="#video-0"
         width="1"
         height="0.5625"
-        position="0 0 0.5"
-        billboard>
+        position="0 0.7 0"
+        visible="true">
+      </a-video>
+
+      <a-video
+        id="plane-1"
+        src="#video-1"
+        width="1"
+        height="0.5625"
+        position="0 0.7 0"
+        visible="false">
+      </a-video>
+
+      <a-video
+        id="plane-2"
+        src="#video-2"
+        width="1"
+        height="0.5625"
+        position="0 0.7 0"
+        visible="false">
+      </a-video>
+
+      <a-video
+        id="plane-3"
+        src="#video-3"
+        width="1"
+        height="0.5625"
+        position="0 0.7 0"
+        visible="false">
+      </a-video>
+
+      <a-video
+        id="plane-4"
+        src="#video-4"
+        width="1"
+        height="0.5625"
+        position="0 0.7 0"
+        visible="false">
       </a-video>
 
     </a-entity>
@@ -121,45 +190,153 @@
 
   <script>
     // ============================================================
+    // CAROUSEL CONFIGURATION
+    // ============================================================
+    // If you add or remove videos, update this number to match.
+    const VIDEO_COUNT = 5;
+
+    // Minimum horizontal distance (px) a touch must travel to count as a swipe.
+    const SWIPE_THRESHOLD = 50;
+
+
+    // ============================================================
     // START THE CAMERA AFTER THE PAGE IS READY
     // ============================================================
-    // We wait for A-Frame to finish loading, then start MindAR.
-    // We also hide the "loading" message once tracking begins.
     window.addEventListener('DOMContentLoaded', function () {
-      const sceneEl = document.querySelector('a-scene');
+      const sceneEl   = document.querySelector('a-scene');
       const loadingEl = document.getElementById('loading');
+      const hintEl    = document.getElementById('swipe-hint');
 
+      // ---- Start MindAR once A-Frame has fully loaded ----
       sceneEl.addEventListener('loaded', function () {
         const arSystem = sceneEl.systems['mindar-image-system'];
         arSystem.start(); // turns on the camera and starts tracking
       });
 
-      // Hide the loading message once the camera video is actually running.
+      // ---- Hide the loading overlay once the camera is running ----
       sceneEl.addEventListener('arReady', function () {
         loadingEl.style.display = 'none';
       });
 
-      const video = document.getElementById('ar-video');
-      const unmuteBtn = document.getElementById('unmute-btn');
+
+      // ============================================================
+      // CAROUSEL STATE
+      // ============================================================
+      let currentIndex    = 0;     // which video/plane is currently active
+      let isMarkerVisible = false; // true only while the image target is detected
+      let hintShown       = false; // show the swipe hint only once per session
+
+      // Grab all video elements and all A-Frame plane entities.
+      const videos = [
+        document.getElementById('video-0'),
+        document.getElementById('video-1'),
+        document.getElementById('video-2'),
+        document.getElementById('video-3'),
+        document.getElementById('video-4'),
+      ];
+
+      const planes = [
+        document.getElementById('plane-0'),
+        document.getElementById('plane-1'),
+        document.getElementById('plane-2'),
+        document.getElementById('plane-3'),
+        document.getElementById('plane-4'),
+      ];
+
+
+      // ============================================================
+      // AUTO-ADVANCE PLAYLIST
+      // ============================================================
+      // Each video fires 'ended' when it plays to the end (only possible
+      // because 'loop' is intentionally removed from the <video> tags).
+      // We advance to the next slide exactly as if the user swiped left.
+      // The isMarkerVisible guard prevents auto-advance from triggering
+      // while the target is off-screen (e.g. user looks away mid-video).
+      videos.forEach(function (vid) {
+        vid.addEventListener('ended', function () {
+          if (!isMarkerVisible) return;
+          switchVideo(+1);
+        });
+      });
+
+
+      // ============================================================
+      // SWITCH VIDEO HELPER
+      // ============================================================
+      // direction: +1 = next (swipe left), -1 = previous (swipe right)
+      function switchVideo(direction) {
+        // Guard: do nothing if the marker is not currently visible.
+        // This prevents phantom swipes from queuing up off-screen.
+        if (!isMarkerVisible) return;
+
+        const oldIndex = currentIndex;
+        currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
+
+        // Hide, pause, and rewind the outgoing slide.
+        // Resetting currentTime ensures a clean restart if the user
+        // swipes back to this video later.
+        planes[oldIndex].setAttribute('visible', false);
+        videos[oldIndex].pause();
+        videos[oldIndex].currentTime = 0;
+
+        // Show and play the incoming slide.
+        planes[currentIndex].setAttribute('visible', true);
+        videos[currentIndex].play();
+      }
+
+
+      // ============================================================
+      // AR TRACKING EVENTS
+      // ============================================================
       const target = document.querySelector('[mindar-image-target]');
 
-      // Show unmute button when target is found, hide when lost.
+      // Image target found: resume the currently active video.
       target.addEventListener('targetFound', function () {
-        video.play();
-        if (video.muted) unmuteBtn.style.display = 'block';
-      });
-      target.addEventListener('targetLost', function () {
-        video.pause();
-        unmuteBtn.style.display = 'none';
+        isMarkerVisible = true;
+        videos[currentIndex].play();
+
+        // Show the swipe hint the very first time the target is detected.
+        if (!hintShown) {
+          hintShown = true;
+          hintEl.classList.add('visible');
+          setTimeout(function () { hintEl.classList.remove('visible'); }, 3000);
+        }
       });
 
-      // Unmute on tap — requires user gesture to satisfy browser policy.
-      unmuteBtn.addEventListener('click', function () {
-        video.muted = false;
-        video.play();
-        unmuteBtn.style.display = 'none';
+      // Image target lost: pause the currently active video.
+      target.addEventListener('targetLost', function () {
+        isMarkerVisible = false;
+        videos[currentIndex].pause();
       });
-    });
+
+
+      // ============================================================
+      // SWIPE / TOUCH GESTURE DETECTION
+      // ============================================================
+      // We listen on the whole document so the user can swipe anywhere
+      // on the screen, not just on the video itself.
+      let touchStartX = 0;
+
+      document.addEventListener('touchstart', function (e) {
+        // Record where the finger first touched the screen.
+        touchStartX = e.changedTouches[0].screenX;
+      }, { passive: true });
+
+      document.addEventListener('touchend', function (e) {
+        const touchEndX = e.changedTouches[0].screenX;
+        const delta = touchEndX - touchStartX;
+
+        if (delta < -SWIPE_THRESHOLD) {
+          // Finger moved LEFT → advance to the next video.
+          switchVideo(+1);
+        } else if (delta > SWIPE_THRESHOLD) {
+          // Finger moved RIGHT → go back to the previous video.
+          switchVideo(-1);
+        }
+        // Small movements (< threshold) are ignored to avoid accidental switches.
+      }, { passive: true });
+
+    }); // end DOMContentLoaded
   </script>
 </body>
 </html>
