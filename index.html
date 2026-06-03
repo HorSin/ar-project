@@ -116,11 +116,15 @@
         JavaScript animates ALL planes simultaneously on every swipe.
 
         Slot table (COVERFLOW_SLOTS in script):
-          Slot 0 (far-left):  x=-1.00  z=-0.20  rotY=+65°  scale=0.22
-          Slot 1 (left):      x=-0.65  z=-0.06  rotY=+38°  scale=0.32
+          Slot 0 (far-left):  x=-1.20  z=-0.20  rotY=+65°  scale=0.50
+          Slot 1 (left):      x=-0.75  z=-0.06  rotY=+38°  scale=0.70
           Slot 2 (center):    x=  0    z=+0.02  rotY=  0°  scale=1.00  ← active (full size)
-          Slot 3 (right):     x=+0.65  z=-0.06  rotY=-38°  scale=0.32
-          Slot 4 (far-right): x=+1.00  z=-0.20  rotY=-65°  scale=0.22
+          Slot 3 (right):     x=+0.75  z=-0.06  rotY=-38°  scale=0.70
+          Slot 4 (far-right): x=+1.20  z=-0.20  rotY=-65°  scale=0.50
+
+        Height for every plane is computed dynamically from each video's
+        real aspect ratio (loadedmetadata → aspectRatios[i] → getPlaneHeight).
+        All planes use width="1" so height = videoHeight / videoWidth.
 
         Initial mapping (currentIndex=0):
           plane-0  rel=0 → slot 2 (center)
@@ -130,25 +134,25 @@
           plane-4  rel=4 → slot 1 (left)
       -->
 
-      <!-- plane-0: slot 2 — center (active, full size) -->
+      <!-- plane-0: slot 2 — center (active, full size, height set by JS) -->
       <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
         position="0 0.7 0.02" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
 
-      <!-- plane-1: slot 3 — right (thumbnail) -->
+      <!-- plane-1: slot 3 — right -->
       <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-        position="0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 -38 0" visible="false"></a-video>
+        position="0.75 0.7 -0.06" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="false"></a-video>
 
-      <!-- plane-2: slot 4 — far-right (thumbnail) -->
+      <!-- plane-2: slot 4 — far-right -->
       <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-        position="1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 -65 0" visible="false"></a-video>
+        position="1.20 0.7 -0.20" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="false"></a-video>
 
-      <!-- plane-3: slot 0 — far-left (thumbnail) -->
+      <!-- plane-3: slot 0 — far-left -->
       <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-        position="-1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 65 0" visible="false"></a-video>
+        position="-1.20 0.7 -0.20" scale="0.50 0.50 0.50" rotation="0 65 0" visible="false"></a-video>
 
-      <!-- plane-4: slot 1 — left (thumbnail) -->
+      <!-- plane-4: slot 1 — left -->
       <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-        position="-0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 38 0" visible="false"></a-video>
+        position="-0.75 0.7 -0.06" scale="0.70 0.70 0.70" rotation="0 38 0" visible="false"></a-video>
 
     </a-entity>
   </a-scene>
@@ -410,15 +414,17 @@
       var ANIM_MS = 500;
       var Y_BASE  = 0.7;  // vertical height shared by all cards
 
-      // Slot layout — cylindrical curve with large cards.
-      // To resize: edit sx (scale). To adjust spread: edit x. To adjust
-      // depth curve: edit z (more negative = rounder). To adjust tilt: edit ry.
+      // Slot layout.
+      // sx = uniform scale.  Center = 1.0 (full target width).
+      // Side cards zoom out: adjacent = 0.70, far = 0.50.
+      // Height is NOT stored here — it is computed per-video from
+      // each file's real aspect ratio and passed into applySlot().
       var COVERFLOW_SLOTS = [
-        { x: -1.00, z: -0.20, ry:  65, sx: 0.22 }, // 0: far-left   (small thumbnail)
-        { x: -0.65, z: -0.06, ry:  38, sx: 0.32 }, // 1: left        (small thumbnail)
-        { x:  0,    z:  0.02, ry:   0, sx: 1.00 }, // 2: center      (full target width)
-        { x:  0.65, z: -0.06, ry: -38, sx: 0.32 }, // 3: right       (small thumbnail)
-        { x:  1.00, z: -0.20, ry: -65, sx: 0.22 }, // 4: far-right   (small thumbnail)
+        { x: -1.20, z: -0.20, ry:  65, sx: 0.50 }, // 0: far-left
+        { x: -0.75, z: -0.06, ry:  38, sx: 0.70 }, // 1: left
+        { x:  0,    z:  0.02, ry:   0, sx: 1.00 }, // 2: center (zoom-in, full size)
+        { x:  0.75, z: -0.06, ry: -38, sx: 0.70 }, // 3: right
+        { x:  1.20, z: -0.20, ry: -65, sx: 0.50 }, // 4: far-right
       ];
 
       // Maps a video index to its current slot (0–4).
@@ -430,21 +436,29 @@
         return (rel + 2) % VIDEO_COUNT;
       }
 
-      // Apply a slot's transform to a plane — instantly or animated.
-      // Pass skipRotation=true for the active (center) plane so that
-      // look-at handles rotation exclusively, with no animation conflict.
-      function applySlot(plane, slotIdx, animate, skipRotation) {
+      // Apply a slot's transform (position, scale, rotation, height) to a plane.
+      //
+      // skipRotation — pass true for the center plane so look-at owns rotation.
+      // height       — the plane's correct aspect-ratio height (videoH/videoW).
+      //                Animated alongside scale so the card zooms in/out correctly.
+      //                Pass undefined to leave height unchanged.
+      function applySlot(plane, slotIdx, animate, skipRotation, height) {
         var s      = COVERFLOW_SLOTS[slotIdx];
         var posStr = s.x + ' ' + Y_BASE + ' ' + s.z;
         var rotStr = '0 ' + s.ry + ' 0';
         var scaStr = s.sx + ' ' + s.sx + ' ' + s.sx;
+
         if (animate) {
           plane.setAttribute('animation__pos',   { property: 'position', to: posStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           plane.setAttribute('animation__scale', { property: 'scale',    to: scaStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           if (!skipRotation) {
             plane.setAttribute('animation__rot', { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           } else {
-            plane.removeAttribute('animation__rot'); // let look-at own rotation
+            plane.removeAttribute('animation__rot');
+          }
+          if (height !== undefined) {
+            // Animate height so aspect-ratio corrections zoom smoothly with scale.
+            plane.setAttribute('animation__height', { property: 'height', to: height, dur: ANIM_MS, easing: 'easeInOutCubic' });
           }
         } else {
           plane.setAttribute('position', posStr);
@@ -452,17 +466,18 @@
           if (!skipRotation) {
             plane.setAttribute('rotation', rotStr);
           }
+          if (height !== undefined) {
+            plane.setAttribute('height', height);
+          }
         }
       }
 
       // Snap all planes to their current slots instantly and make them visible.
-      // Active plane: look-at handles rotation (skipRotation=true).
-      // Side planes: rotation is set to their tilt angle, look-at removed.
+      // Height is computed per-video (real aspect ratio) and passed to applySlot.
       function updateLayout() {
         planes.forEach(function (plane, i) {
           var isCenter = (i === currentIndex);
-          applySlot(plane, getSlotIndex(i), false, isCenter);
-          plane.setAttribute('height',  getPlaneHeight(i));
+          applySlot(plane, getSlotIndex(i), false, isCenter, getPlaneHeight(i));
           plane.setAttribute('visible', true);
           if (isCenter) {
             plane.setAttribute('look-at', '[camera]');
@@ -482,6 +497,7 @@
           p.removeAttribute('animation__pos');
           p.removeAttribute('animation__rot');
           p.removeAttribute('animation__scale');
+          p.removeAttribute('animation__height');
           p.setAttribute('visible', false);
         });
       }
@@ -553,14 +569,13 @@
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
 
         // Animate all planes to their new slots.
-        // The incoming center skips rotation animation (skipRotation=true)
-        // so look-at owns the rotation without any conflict.
+        // Height (real aspect ratio) is animated alongside scale so each
+        // card zooms in or out without distortion.
+        // The incoming center skips rotation animation — look-at owns it.
         planes.forEach(function (plane, i) {
           var isCenter = (i === currentIndex);
-          applySlot(plane, getSlotIndex(i), true, isCenter);
+          applySlot(plane, getSlotIndex(i), true, isCenter, getPlaneHeight(i));
           if (isCenter) {
-            // Add look-at IMMEDIATELY so the video faces the user
-            // throughout the slide-in animation, not just after it ends.
             plane.setAttribute('look-at', '[camera]');
           }
         });
