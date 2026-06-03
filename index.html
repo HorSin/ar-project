@@ -165,8 +165,8 @@
         plane-3  rel=3 → slot 0 (far-left)
         plane-4  rel=4 → slot 1 (left)
     -->
-    <a-camera position="0 0 0" look-controls="enabled: false">
-      <a-entity id="hud-carousel-container" visible="false">
+    <a-camera position="0 0 0" look-controls="enabled: true">
+      <a-entity id="hud-carousel-container" visible="true">
 
         <!-- Navigation arrows — bracket the center card (half-width ≈ 0.5) -->
         <a-text id="arrow-left"  value="❮" position="-0.62 0 -1.49"
@@ -176,23 +176,23 @@
 
         <!-- plane-0: slot 2 — center (active, full size) -->
         <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
-          position="0 0 -1.50" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
+          position="0 0 -1.50" scale="1 1 1" rotation="0 0 0" visible="true"></a-video>
 
         <!-- plane-1: slot 3 — right -->
         <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-          position="0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="false"></a-video>
+          position="0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="true"></a-video>
 
         <!-- plane-2: slot 4 — far-right -->
         <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-          position="1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="false"></a-video>
+          position="1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="true"></a-video>
 
         <!-- plane-3: slot 0 — far-left -->
         <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-          position="-1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 65 0" visible="false"></a-video>
+          position="-1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 65 0" visible="true"></a-video>
 
         <!-- plane-4: slot 1 — left -->
         <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-          position="-0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 38 0" visible="false"></a-video>
+          position="-0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 38 0" visible="true"></a-video>
 
       </a-entity>
     </a-camera>
