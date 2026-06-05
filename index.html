@@ -9,62 +9,79 @@
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <script>
-    // Two-part fix for "audio plays but video texture is blank":
+    // WHY THREE.VideoTexture FAILS ON iOS MOBILE
+    // ─────────────────────────────────────────────────────────────────────
+    // THREE.VideoTexture uploads video frames via WebGL's texImage2D().
+    // On iOS Safari the browser's hardware video decoder writes into a
+    // protected IOSurface that WebGL cannot read when:
+    //   • the <video> element is display:none  (A-Frame hides asset videos)
+    //   • requestVideoFrameCallback (rVFC) is the update trigger (Three r146+)
+    //   • the element was never in the visual render tree
+    // Result: texture stays blank, audio still plays → "invisible video" bug.
     //
-    // Problem 1 — A-Frame race condition:
-    //   <a-video> sometimes fails to bind the VideoTexture to mesh.material.map
-    //   (asset load vs entity-init timing), leaving the material with no texture.
-    //   The old tick-only component silently did nothing in that case.
-    //
-    // Problem 2 — iOS Safari rVFC + display:none:
-    //   A-Frame hides <video> assets with display:none. iOS Safari 15.4+
-    //   uses requestVideoFrameCallback (rVFC) to drive THREE.VideoTexture
-    //   updates, but rVFC does NOT fire for display:none elements.
-    //   Result: needsUpdate is never set → blank texture, audio still plays.
-    //
-    // Fix: this component explicitly creates THREE.VideoTexture and assigns
-    // it directly to the mesh material (bypasses A-Frame's asset path), then
-    // drives needsUpdate=true every frame while the video is playing
-    // (bypasses the broken rVFC→display:none chain).
+    // THE RELIABLE FIX — Canvas 2D intermediate
+    // ─────────────────────────────────────────────────────────────────────
+    // Draw each video frame into a Canvas 2D context with ctx.drawImage().
+    // Canvas 2D reads video via a CPU-accessible path that bypasses every
+    // iOS restriction above.  Then use THREE.CanvasTexture on that canvas.
+    // This works on all browsers (iOS Safari, Android Chrome, WebView).
     AFRAME.registerComponent('video-texture-fix', {
       init: function () {
         var self = this;
-        this._texture = null;
 
-        // Resolve <video> element from this entity's src="#video-N" attribute.
+        // Resolve the <video> element from src="#video-N".
         var srcAttr = this.el.getAttribute('src') || '';
         this._videoEl = srcAttr.charAt(0) === '#'
           ? document.getElementById(srcAttr.slice(1))
           : null;
+        if (!this._videoEl) { return; }
 
-        // Apply on init and again whenever Three.js rebuilds the mesh object.
-        this.el.addEventListener('object3dset', function (e) {
-          if (e.detail.type === 'mesh') { self._applyTexture(); }
+        // Create an off-screen canvas and 2D context.
+        this._canvas  = document.createElement('canvas');
+        this._canvas.width  = 1280;   // will be updated on loadedmetadata
+        this._canvas.height = 720;
+        this._ctx = this._canvas.getContext('2d');
+
+        // CanvasTexture reads the canvas pixels — no WebGL video path.
+        this._texture = new THREE.CanvasTexture(this._canvas);
+        this._texture.minFilter = THREE.LinearFilter;
+        this._texture.magFilter = THREE.LinearFilter;
+
+        // Keep canvas size in sync with the actual video dimensions.
+        this._videoEl.addEventListener('loadedmetadata', function () {
+          if (self._videoEl.videoWidth) {
+            self._canvas.width  = self._videoEl.videoWidth;
+            self._canvas.height = self._videoEl.videoHeight;
+          }
         });
-        this._applyTexture();
+
+        // Assign the canvas texture to the mesh as soon as it is ready,
+        // and again if Three.js ever rebuilds the mesh object.
+        this.el.addEventListener('object3dset', function (e) {
+          if (e.detail.type === 'mesh') { self._bindTexture(); }
+        });
+        this._bindTexture();
       },
 
-      _applyTexture: function () {
-        if (!this._videoEl) { return; }
+      _bindTexture: function () {
+        if (!this._texture) { return; }
         var mesh = this.el.getObject3D('mesh');
         if (!mesh) { return; }
-
-        if (!this._texture) {
-          this._texture = new THREE.VideoTexture(this._videoEl);
-          this._texture.minFilter = THREE.LinearFilter;
-          this._texture.magFilter = THREE.LinearFilter;
-        }
-
-        // Force-assign, overwriting whatever A-Frame left in map.
-        mesh.material.map = this._texture;
-        mesh.material.needsUpdate = true;
+        mesh.material.map         = this._texture;
+        mesh.material.transparent = false;   // video has no alpha; avoid invisible
+        mesh.material.needsUpdate = true;    // recompile shader with map defined
       },
 
       tick: function () {
-        if (!this._texture || !this._videoEl) { return; }
+        if (!this._ctx || !this._videoEl || !this._texture) { return; }
+        // Only paint when there is a new decoded frame available.
         if (!this._videoEl.paused &&
             this._videoEl.readyState >= this._videoEl.HAVE_CURRENT_DATA) {
-          this._texture.needsUpdate = true;
+          this._ctx.drawImage(
+            this._videoEl, 0, 0,
+            this._canvas.width, this._canvas.height
+          );
+          this._texture.needsUpdate = true;  // upload the canvas to GPU
         }
       }
     });
