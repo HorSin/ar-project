@@ -9,19 +9,62 @@
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <script>
-    // iOS Safari 15.4+ uses requestVideoFrameCallback (rVFC) to drive
-    // THREE.VideoTexture updates.  rVFC does NOT fire for elements that
-    // are display:none — and A-Frame hides <video> assets that way.
-    // Result: texture.needsUpdate is never set → blank plane, audio only.
-    // This component forces needsUpdate=true each tick while the video is
-    // actually playing, bypassing the broken rVFC→display:none chain.
+    // Two-part fix for "audio plays but video texture is blank":
+    //
+    // Problem 1 — A-Frame race condition:
+    //   <a-video> sometimes fails to bind the VideoTexture to mesh.material.map
+    //   (asset load vs entity-init timing), leaving the material with no texture.
+    //   The old tick-only component silently did nothing in that case.
+    //
+    // Problem 2 — iOS Safari rVFC + display:none:
+    //   A-Frame hides <video> assets with display:none. iOS Safari 15.4+
+    //   uses requestVideoFrameCallback (rVFC) to drive THREE.VideoTexture
+    //   updates, but rVFC does NOT fire for display:none elements.
+    //   Result: needsUpdate is never set → blank texture, audio still plays.
+    //
+    // Fix: this component explicitly creates THREE.VideoTexture and assigns
+    // it directly to the mesh material (bypasses A-Frame's asset path), then
+    // drives needsUpdate=true every frame while the video is playing
+    // (bypasses the broken rVFC→display:none chain).
     AFRAME.registerComponent('video-texture-fix', {
-      tick: function () {
+      init: function () {
+        var self = this;
+        this._texture = null;
+
+        // Resolve <video> element from this entity's src="#video-N" attribute.
+        var srcAttr = this.el.getAttribute('src') || '';
+        this._videoEl = srcAttr.charAt(0) === '#'
+          ? document.getElementById(srcAttr.slice(1))
+          : null;
+
+        // Apply on init and again whenever Three.js rebuilds the mesh object.
+        this.el.addEventListener('object3dset', function (e) {
+          if (e.detail.type === 'mesh') { self._applyTexture(); }
+        });
+        this._applyTexture();
+      },
+
+      _applyTexture: function () {
+        if (!this._videoEl) { return; }
         var mesh = this.el.getObject3D('mesh');
-        if (!mesh || !mesh.material || !mesh.material.map) return;
-        var video = mesh.material.map.image;
-        if (video && !video.paused && video.readyState >= video.HAVE_CURRENT_DATA) {
-          mesh.material.map.needsUpdate = true;
+        if (!mesh) { return; }
+
+        if (!this._texture) {
+          this._texture = new THREE.VideoTexture(this._videoEl);
+          this._texture.minFilter = THREE.LinearFilter;
+          this._texture.magFilter = THREE.LinearFilter;
+        }
+
+        // Force-assign, overwriting whatever A-Frame left in map.
+        mesh.material.map = this._texture;
+        mesh.material.needsUpdate = true;
+      },
+
+      tick: function () {
+        if (!this._texture || !this._videoEl) { return; }
+        if (!this._videoEl.paused &&
+            this._videoEl.readyState >= this._videoEl.HAVE_CURRENT_DATA) {
+          this._texture.needsUpdate = true;
         }
       }
     });
