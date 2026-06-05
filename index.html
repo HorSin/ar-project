@@ -191,6 +191,29 @@
     <div class="dot"></div>
   </div>
 
+  <!--
+    VIDEO ELEMENTS — intentionally outside <a-assets>.
+
+    iOS Safari suspends video-track decoding for elements inside
+    display:none containers (A-Frame's <a-assets> sets display:none on
+    itself).  Audio keeps playing because it has a separate pipeline,
+    which is exactly the "audio works, blank video" bug.
+
+    Placing videos in a position:fixed div that is off-screen (not
+    display:none) forces iOS to keep decoding video frames.  The div is
+    invisible to the user but participates in the layout tree.
+    The src="#video-N" references in <a-video> resolve by DOM id and
+    work identically whether the elements are inside <a-assets> or not.
+  -->
+  <div id="video-assets"
+       style="position:fixed;top:-200%;left:-200%;width:1px;height:1px;overflow:hidden;pointer-events:none;">
+    <video id="video-0" src="video1.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-1" src="video2.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-2" src="video3.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-3" src="video4.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-4" src="video5.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+  </div>
+
   <a-scene
     mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;"
     color-space="sRGB"
@@ -198,24 +221,8 @@
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <!-- timeout="30000": gives slow mobile connections 30 s to buffer 5 videos. -->
-    <a-assets timeout="30000">
-      <!--
-        VIDEO CAROUSEL ASSETS
-        ============================================================
-        - Replace src filenames with your own .mp4 files.
-        - Keep ALL attributes as-is: muted is required for the iOS
-          audio-unlock step; it is removed automatically right before
-          actual playback by the JavaScript below.
-        - loop is intentionally OMITTED so the 'ended' event fires and
-          the carousel can auto-advance to the next video.
-      -->
-      <video id="video-0" src="video1.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-1" src="video2.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-2" src="video3.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-3" src="video4.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-4" src="video5.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    </a-assets>
+    <!-- a-assets kept for A-Frame scene timing; videos are outside (see below). -->
+    <a-assets timeout="30000"></a-assets>
 
     <!--
       ============================================================
