@@ -276,10 +276,7 @@
   <div id="video-assets"
        style="position:fixed;top:-200%;left:-200%;width:1px;height:1px;overflow:hidden;pointer-events:none;">
     <video id="video-0" src="video1.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    <video id="video-1" src="video2.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    <video id="video-2" src="video3.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    <video id="video-3" src="video4.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    <video id="video-4" src="video5.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <!-- video-1..4 temporarily removed for testing -->
   </div>
 
   <a-scene
@@ -332,21 +329,7 @@
         <a-video id="plane-0" src="#video-0" video-texture-fix width="1" height="0.5625"
           position="0 0 -1.50" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
 
-        <!-- plane-1: slot 3 — right -->
-        <a-video id="plane-1" src="#video-1" video-texture-fix width="1" height="0.5625"
-          position="0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="false"></a-video>
-
-        <!-- plane-2: slot 4 — far-right -->
-        <a-video id="plane-2" src="#video-2" video-texture-fix width="1" height="0.5625"
-          position="1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="false"></a-video>
-
-        <!-- plane-3: slot 0 — far-left -->
-        <a-video id="plane-3" src="#video-3" video-texture-fix width="1" height="0.5625"
-          position="-1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 65 0" visible="false"></a-video>
-
-        <!-- plane-4: slot 1 — left -->
-        <a-video id="plane-4" src="#video-4" video-texture-fix width="1" height="0.5625"
-          position="-0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 38 0" visible="false"></a-video>
+        <!-- plane-1..4 temporarily removed for testing -->
 
       </a-entity>
     </a-camera>
@@ -364,7 +347,7 @@
     // ============================================================
     // CAROUSEL CONFIGURATION
     // ============================================================
-    const VIDEO_COUNT      = 5;   // update if you add or remove videos
+    const VIDEO_COUNT      = 1;   // TEMP: reduced to 1 for testing
     const SWIPE_THRESHOLD  = 50;  // minimum px horizontal movement to count as a swipe
 
 
