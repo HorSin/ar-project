@@ -8,6 +8,25 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
+  <script>
+    // iOS Safari 15.4+ uses requestVideoFrameCallback (rVFC) to drive
+    // THREE.VideoTexture updates.  rVFC does NOT fire for elements that
+    // are display:none — and A-Frame hides <video> assets that way.
+    // Result: texture.needsUpdate is never set → blank plane, audio only.
+    // This component forces needsUpdate=true each tick while the video is
+    // actually playing, bypassing the broken rVFC→display:none chain.
+    AFRAME.registerComponent('video-texture-fix', {
+      tick: function () {
+        var mesh = this.el.getObject3D('mesh');
+        if (!mesh || !mesh.material || !mesh.material.map) return;
+        var video = mesh.material.map.image;
+        if (video && !video.paused && video.readyState >= video.HAVE_CURRENT_DATA) {
+          mesh.material.map.needsUpdate = true;
+        }
+      }
+    });
+  </script>
+
   <style>
     /* touch-action: none prevents iOS pull-to-refresh / Android back-swipe during swipes. */
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
@@ -175,23 +194,23 @@
           align="center" color="white" width="3"></a-text>
 
         <!-- plane-0: slot 2 — center (active, full size) -->
-        <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
+        <a-video id="plane-0" src="#video-0" video-texture-fix width="1" height="0.5625"
           position="0 0 -1.50" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
 
         <!-- plane-1: slot 3 — right -->
-        <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
+        <a-video id="plane-1" src="#video-1" video-texture-fix width="1" height="0.5625"
           position="0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="false"></a-video>
 
         <!-- plane-2: slot 4 — far-right -->
-        <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
+        <a-video id="plane-2" src="#video-2" video-texture-fix width="1" height="0.5625"
           position="1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="false"></a-video>
 
         <!-- plane-3: slot 0 — far-left -->
-        <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
+        <a-video id="plane-3" src="#video-3" video-texture-fix width="1" height="0.5625"
           position="-1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 65 0" visible="false"></a-video>
 
         <!-- plane-4: slot 1 — left -->
-        <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
+        <a-video id="plane-4" src="#video-4" video-texture-fix width="1" height="0.5625"
           position="-0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 38 0" visible="false"></a-video>
 
       </a-entity>
