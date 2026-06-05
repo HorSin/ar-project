@@ -571,15 +571,6 @@
         });
       }
 
-      // Force the active plane's video texture to re-upload to the GPU.
-      // Needed after muted→unmuted play() because the browser re-initialises
-      // the media pipeline, breaking THREE.VideoTexture's auto-update.
-      function refreshActiveTexture() {
-        var mesh = planes[currentIndex].getObject3D('mesh');
-        if (mesh && mesh.material && mesh.material.map) {
-          mesh.material.map.needsUpdate = true;
-        }
-      }
 
 
       // ============================================================
@@ -594,8 +585,11 @@
         startBtn.disabled = true;
         startBtn.textContent = t.starting; // translated "Starting…"
 
-        // Unlock all videos while still muted.
+        // Unlock all videos for unmuted playback while inside the gesture.
+        // iOS authorises future play() calls based on the muted state used here,
+        // so we must set muted=false NOW (in the gesture) to allow unmuted play later.
         videos.forEach(function (v) {
+          v.muted = false;
           v.play().catch(function () {});
           v.pause();
           v.currentTime = 0;
@@ -653,10 +647,8 @@
           d.classList.toggle('active', i === currentIndex);
         });
 
-        // Unmute and play the newly centered video.
-        videos[currentIndex].muted = false;
+        // Play the newly centered video (already unmuted from the start-gesture unlock).
         videos[currentIndex].play();
-        refreshActiveTexture();
 
         setTimeout(function () { isAnimating = false; }, ANIM_MS + 50);
       }
@@ -681,9 +673,8 @@
         setIndicatorsVisible(true);
         dotEl.classList.add('visible');
 
-        videos[currentIndex].muted = false;
+        // Play active video (already unmuted from the start-gesture unlock).
         videos[currentIndex].play();
-        refreshActiveTexture();
 
         if (!hintShown) {
           hintShown = true;
