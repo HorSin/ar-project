@@ -8,6 +8,123 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
+  <script>
+    // WHY THREE.VideoTexture FAILS ON iOS MOBILE
+    // ─────────────────────────────────────────────────────────────────────
+    // THREE.VideoTexture uploads video frames via WebGL's texImage2D().
+    // On iOS Safari the browser's hardware video decoder writes into a
+    // protected IOSurface that WebGL cannot read when:
+    //   • the <video> element is display:none  (A-Frame hides asset videos)
+    //   • requestVideoFrameCallback (rVFC) is the update trigger (Three r146+)
+    //   • the element was never in the visual render tree
+    // Result: texture stays blank, audio still plays → "invisible video" bug.
+    //
+    // THE RELIABLE FIX — Canvas 2D intermediate
+    // ─────────────────────────────────────────────────────────────────────
+    // Draw each video frame into a Canvas 2D context with ctx.drawImage().
+    // Canvas 2D reads video via a CPU-accessible path that bypasses every
+    // iOS restriction above.  Then use THREE.CanvasTexture on that canvas.
+    // This works on all browsers (iOS Safari, Android Chrome, WebView).
+    // ── shared debug reporter ────────────────────────────────────────
+    var _dbg = (function () {
+      var panel = null;
+      var rows  = {};
+      return function (key, val) {
+        if (!panel) { panel = document.getElementById('debug-panel'); }
+        if (!panel) { return; }
+        rows[key] = val;
+        panel.textContent = Object.keys(rows).map(function (k) {
+          return k + ': ' + rows[k];
+        }).join('\n');
+      };
+    }());
+
+    AFRAME.registerComponent('video-texture-fix', {
+      init: function () {
+        var self    = this;
+        var elId    = this.el.id;
+
+        // Resolve the <video> element from src="#video-N".
+        var srcAttr  = this.el.getAttribute('src') || '';
+        this._videoEl = srcAttr.charAt(0) === '#'
+          ? document.getElementById(srcAttr.slice(1))
+          : null;
+
+        _dbg(elId + '_video', this._videoEl ? 'found' : 'NOT FOUND');
+        if (!this._videoEl) { return; }
+
+        // Off-screen canvas — iOS decodes frames into Canvas2D even when
+        // WebGL texImage2D is blocked on display:none elements.
+        this._canvas        = document.createElement('canvas');
+        this._canvas.width  = 1280;
+        this._canvas.height = 720;
+        this._ctx           = this._canvas.getContext('2d');
+
+        // Paint canvas RED immediately so we can tell if texture binding works
+        // even before the video plays: red plane = bound; nothing = not bound.
+        this._ctx.fillStyle = '#ff0000';
+        this._ctx.fillRect(0, 0, 1280, 720);
+
+        this._texture = new THREE.CanvasTexture(this._canvas);
+        this._texture.minFilter = THREE.LinearFilter;
+        this._texture.magFilter = THREE.LinearFilter;
+
+        this._drawCount = 0;
+
+        this._videoEl.addEventListener('loadedmetadata', function () {
+          if (self._videoEl.videoWidth) {
+            self._canvas.width  = self._videoEl.videoWidth;
+            self._canvas.height = self._videoEl.videoHeight;
+            _dbg(elId + '_meta', self._videoEl.videoWidth + 'x' + self._videoEl.videoHeight);
+          }
+        });
+
+        this.el.addEventListener('object3dset', function (e) {
+          if (e.detail.type === 'mesh') {
+            _dbg(elId + '_meshevt', 'object3dset fired');
+            self._bindTexture();
+          }
+        });
+        this._bindTexture();
+      },
+
+      _bindTexture: function () {
+        if (!this._texture) { return; }
+        var mesh = this.el.getObject3D('mesh');
+        _dbg(this.el.id + '_mesh', mesh ? 'OK' : 'null — waiting');
+        if (!mesh) { return; }
+        mesh.material.map         = this._texture;
+        mesh.material.transparent = false;
+        mesh.material.needsUpdate = true;
+        _dbg(this.el.id + '_bind', 'texture bound ✓');
+      },
+
+      tick: function () {
+        if (!this._ctx || !this._videoEl || !this._texture) { return; }
+
+        var vid = this._videoEl;
+        // Report video state for plane-0 only (others are identical pattern).
+        if (this.el.id === 'plane-0') {
+          _dbg('v0_state',
+            'paused=' + vid.paused +
+            ' ready=' + vid.readyState +
+            ' t=' + vid.currentTime.toFixed(1) +
+            ' draws=' + this._drawCount);
+        }
+
+        if (!vid.paused && vid.readyState >= vid.HAVE_CURRENT_DATA) {
+          try {
+            this._ctx.drawImage(vid, 0, 0, this._canvas.width, this._canvas.height);
+            this._drawCount++;
+            this._texture.needsUpdate = true;
+          } catch (e) {
+            _dbg(this.el.id + '_err', e.message);
+          }
+        }
+      }
+    });
+  </script>
+
   <style>
     /* touch-action: none prevents iOS pull-to-refresh / Android back-swipe during swipes. */
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
@@ -31,6 +148,34 @@
     }
     #start-btn:disabled { opacity: 0.5; }
 
+    /* ---- Scanning instruction overlay ---- */
+    /* Shown after the camera starts; hidden on first targetFound. */
+    #scan-instruction {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; gap: 24px;
+      background: rgba(0,0,0,0.78); color: #fff; font-family: sans-serif;
+      text-align: center; z-index: 9998; padding: 32px; box-sizing: border-box;
+      opacity: 0; transition: opacity 0.5s;
+    }
+    #scan-instruction.visible { display: flex; opacity: 1; }
+    #scan-instruction h2 { margin: 0; font-size: 20px; font-weight: bold; line-height: 1.4; }
+    #scan-instruction p  { margin: 0; font-size: 14px; opacity: 0.7; line-height: 1.5; }
+
+    /* The target image thumbnail with a pulsing border so it draws the eye. */
+    #scan-target-img {
+      width: 180px; max-width: 55vw;
+      border-radius: 12px;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 0 rgba(255,255,255,0.7);
+      animation: scan-pulse 2s infinite;
+    }
+    @keyframes scan-pulse {
+      0%   { box-shadow: 0 0 0  0   rgba(255,255,255,0.7); }
+      50%  { box-shadow: 0 0 0 10px rgba(255,255,255,0);   }
+      100% { box-shadow: 0 0 0  0   rgba(255,255,255,0);   }
+    }
+
     /* ---- Swipe hint (fades in once on first target detection) ---- */
     #swipe-hint {
       position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
@@ -51,14 +196,37 @@
       background: rgba(255,255,255,0.35); transition: background 0.3s;
     }
     .dot.active { background: #fff; transform: scale(1.25); }
+
+    /* ---- Debug overlay (remove after issue is resolved) ---- */
+    #debug-panel {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.75); color: #0f0;
+      font-family: monospace; font-size: 11px; line-height: 1.6;
+      padding: 6px 10px; z-index: 99999; pointer-events: none;
+      white-space: pre;
+    }
   </style>
 </head>
 
 <body>
+  <!-- Debug panel — remove after issue resolved -->
+  <div id="debug-panel">waiting…</div>
+
   <!-- Start-gate overlay. The button tap unlocks iOS audio AND camera. -->
   <div id="loading">
     <button id="start-btn">Tap to Start AR</button>
     <p>Point your camera at<br>your target photo after tapping.</p>
+  </div>
+
+  <!--
+    Scanning instruction overlay.
+    Shown after the camera starts (arReady), hidden on first targetFound.
+    The stitch.png thumbnail shows users exactly which image to point at.
+  -->
+  <div id="scan-instruction">
+    <img id="scan-target-img" src="stitch.png" alt="Target image" />
+    <h2 id="scan-title">Point your camera at this image</h2>
+    <p  id="scan-subtitle">Keep the image inside the camera view</p>
   </div>
 
   <!-- Swipe hint shown briefly on first target detection. -->
@@ -73,6 +241,29 @@
     <div class="dot"></div>
   </div>
 
+  <!--
+    VIDEO ELEMENTS — intentionally outside <a-assets>.
+
+    iOS Safari suspends video-track decoding for elements inside
+    display:none containers (A-Frame's <a-assets> sets display:none on
+    itself).  Audio keeps playing because it has a separate pipeline,
+    which is exactly the "audio works, blank video" bug.
+
+    Placing videos in a position:fixed div that is off-screen (not
+    display:none) forces iOS to keep decoding video frames.  The div is
+    invisible to the user but participates in the layout tree.
+    The src="#video-N" references in <a-video> resolve by DOM id and
+    work identically whether the elements are inside <a-assets> or not.
+  -->
+  <div id="video-assets"
+       style="position:fixed;top:-200%;left:-200%;width:1px;height:1px;overflow:hidden;pointer-events:none;">
+    <video id="video-0" src="video1.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-1" src="video2.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-2" src="video3.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-3" src="video4.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+    <video id="video-4" src="video5.mp4" muted playsinline webkit-playsinline preload="auto"></video>
+  </div>
+
   <a-scene
     mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001;"
     color-space="sRGB"
@@ -80,80 +271,78 @@
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <!-- timeout="30000": gives slow mobile connections 30 s to buffer 5 videos. -->
-    <a-assets timeout="30000">
-      <!--
-        VIDEO CAROUSEL ASSETS
-        ============================================================
-        - Replace src filenames with your own .mp4 files.
-        - Keep ALL attributes as-is: muted is required for the iOS
-          audio-unlock step; it is removed automatically right before
-          actual playback by the JavaScript below.
-        - loop is intentionally OMITTED so the 'ended' event fires and
-          the carousel can auto-advance to the next video.
-      -->
-      <video id="video-0" src="video1.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-1" src="video2.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-2" src="video3.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-3" src="video4.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-      <video id="video-4" src="video5.mp4" muted playsinline webkit-playsinline preload="auto"></video>
-    </a-assets>
+    <!-- a-assets kept for A-Frame scene timing; videos are outside (see below). -->
+    <a-assets timeout="30000"></a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <!--
+      ============================================================
+      HUD CAROUSEL — locked to the camera viewport
+      ============================================================
+      The carousel is nested INSIDE <a-camera> so it moves with
+      the camera and is never affected by the target image angle.
+      Visibility is toggled by JavaScript on targetFound/targetLost.
 
-    <a-entity mindar-image-target="targetIndex: 0">
+      All Z coordinates are negative (in front of the lens):
+        center  z = -1.50  (base depth)
+        left/right z = -1.56  (slight depth for Cover Flow curve)
+        far     z = -1.70  (deeper for the cylindrical arc effect)
 
-      <!-- ===== 3D NAVIGATION ARROWS ===== -->
-      <!-- Bracket the center card (active video half-width = 0.5 at scale 1.0). -->
-      <a-text id="arrow-left"  value="❮" position="-0.62 0.7 0.02"
-        align="center" color="white" width="3" visible="false"></a-text>
-      <a-text id="arrow-right" value="❯" position=" 0.62 0.7 0.02"
-        align="center" color="white" width="3" visible="false"></a-text>
+      Slot table (COVERFLOW_SLOTS in script):
+        Slot 0 (far-left):  x=-1.20  z=-1.70  rotY=+65°  scale=0.50
+        Slot 1 (left):      x=-0.75  z=-1.56  rotY=+38°  scale=0.70
+        Slot 2 (center):    x=  0    z=-1.50  rotY=  0°  scale=1.00  ← active
+        Slot 3 (right):     x=+0.75  z=-1.56  rotY=-38°  scale=0.70
+        Slot 4 (far-right): x=+1.20  z=-1.70  rotY=-65°  scale=0.50
 
-      <!-- ===== COVER FLOW CURVED CAROUSEL =====
-        All 5 planes are direct children of the target entity.
-        Each has its own position/scale/rotation for its starting slot.
-        JavaScript animates ALL planes simultaneously on every swipe.
+      Initial mapping (currentIndex=0):
+        plane-0  rel=0 → slot 2 (center)
+        plane-1  rel=1 → slot 3 (right)
+        plane-2  rel=2 → slot 4 (far-right)
+        plane-3  rel=3 → slot 0 (far-left)
+        plane-4  rel=4 → slot 1 (left)
+    -->
+    <a-camera position="0 0 0" look-controls="enabled: false">
+      <a-entity id="hud-carousel-container" visible="false">
 
-        Slot table (COVERFLOW_SLOTS in script):
-          Slot 0 (far-left):  x=-1.00  z=-0.20  rotY=+65°  scale=0.22
-          Slot 1 (left):      x=-0.65  z=-0.06  rotY=+38°  scale=0.32
-          Slot 2 (center):    x=  0    z=+0.02  rotY=  0°  scale=1.00  ← active (full size)
-          Slot 3 (right):     x=+0.65  z=-0.06  rotY=-38°  scale=0.32
-          Slot 4 (far-right): x=+1.00  z=-0.20  rotY=-65°  scale=0.22
+        <!-- Navigation arrows — bracket the center card (half-width ≈ 0.5) -->
+        <a-text id="arrow-left"  value="❮" position="-0.62 0 -1.49"
+          align="center" color="white" width="3"></a-text>
+        <a-text id="arrow-right" value="❯" position=" 0.62 0 -1.49"
+          align="center" color="white" width="3"></a-text>
 
-        Initial mapping (currentIndex=0):
-          plane-0  rel=0 → slot 2 (center)
-          plane-1  rel=1 → slot 3 (right)
-          plane-2  rel=2 → slot 4 (far-right)
-          plane-3  rel=3 → slot 0 (far-left)
-          plane-4  rel=4 → slot 1 (left)
-      -->
+        <!-- plane-0: slot 2 — center (active, full size) -->
+        <a-video id="plane-0" src="#video-0" video-texture-fix width="1" height="0.5625"
+          position="0 0 -1.50" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
 
-      <!-- plane-0: slot 2 — center (active, full size) -->
-      <a-video id="plane-0" src="#video-0" width="1" height="0.5625"
-        position="0 0.7 0.02" scale="1 1 1" rotation="0 0 0" visible="false"></a-video>
+        <!-- plane-1: slot 3 — right -->
+        <a-video id="plane-1" src="#video-1" video-texture-fix width="1" height="0.5625"
+          position="0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 -38 0" visible="false"></a-video>
 
-      <!-- plane-1: slot 3 — right (thumbnail) -->
-      <a-video id="plane-1" src="#video-1" width="1" height="0.5625"
-        position="0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 -38 0" visible="false"></a-video>
+        <!-- plane-2: slot 4 — far-right -->
+        <a-video id="plane-2" src="#video-2" video-texture-fix width="1" height="0.5625"
+          position="1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 -65 0" visible="false"></a-video>
 
-      <!-- plane-2: slot 4 — far-right (thumbnail) -->
-      <a-video id="plane-2" src="#video-2" width="1" height="0.5625"
-        position="1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 -65 0" visible="false"></a-video>
+        <!-- plane-3: slot 0 — far-left -->
+        <a-video id="plane-3" src="#video-3" video-texture-fix width="1" height="0.5625"
+          position="-1.20 0 -1.70" scale="0.50 0.50 0.50" rotation="0 65 0" visible="false"></a-video>
 
-      <!-- plane-3: slot 0 — far-left (thumbnail) -->
-      <a-video id="plane-3" src="#video-3" width="1" height="0.5625"
-        position="-1.00 0.7 -0.20" scale="0.22 0.22 0.22" rotation="0 65 0" visible="false"></a-video>
+        <!-- plane-4: slot 1 — left -->
+        <a-video id="plane-4" src="#video-4" video-texture-fix width="1" height="0.5625"
+          position="-0.75 0 -1.56" scale="0.70 0.70 0.70" rotation="0 38 0" visible="false"></a-video>
 
-      <!-- plane-4: slot 1 — left (thumbnail) -->
-      <a-video id="plane-4" src="#video-4" width="1" height="0.5625"
-        position="-0.65 0.7 -0.06" scale="0.32 0.32 0.32" rotation="0 38 0" visible="false"></a-video>
+      </a-entity>
+    </a-camera>
 
-    </a-entity>
+    <!-- Target entity kept empty — only needed to fire targetFound/targetLost events. -->
+    <a-entity mindar-image-target="targetIndex: 0"></a-entity>
   </a-scene>
 
   <script>
+    // NOTE: The billboard component has been removed.
+    // Planes are now children of <a-camera> (HUD space), so rotation="0 0 0"
+    // already faces the camera perfectly without any per-frame correction.
+
+
     // ============================================================
     // CAROUSEL CONFIGURATION
     // ============================================================
@@ -172,70 +361,90 @@
         start:    'Tap to Start AR',
         subtitle: 'Point your camera at\nyour target photo after tapping.',
         starting: 'Starting…',
-        swipe:    '← Swipe to browse videos →'
+        swipe:       '← Swipe to browse videos →',
+        scanTitle:    'Point your camera at this image',
+        scanSubtitle: 'Keep the image fully inside your camera view'
       },
       // ── Chinese Simplified ──
       zh: {
         start:    '点击开始 AR',
         subtitle: '点击后，将相机对准您的目标图片。',
         starting: '启动中…',
-        swipe:    '← 滑动浏览视频 →'
+        swipe:       '← 滑动浏览视频 →',
+        scanTitle:    '将相机对准此图片',
+        scanSubtitle: '请将图片完整保持在相机视野内'
       },
       // ── Chinese Traditional ──
       'zh-TW': {
         start:    '點擊開始 AR',
         subtitle: '點擊後，將相機對準您的目標圖片。',
         starting: '啟動中…',
-        swipe:    '← 滑動瀏覽影片 →'
+        swipe:       '← 滑動瀏覽影片 →',
+        scanTitle:    '將相機對準此圖片',
+        scanSubtitle: '請將圖片完整保持在相機視野內'
       },
       // ── Malay ──
       ms: {
         start:    'Ketuk untuk Mulakan AR',
         subtitle: 'Selepas mengetuk, arahkan\nkamera ke foto sasaran anda.',
         starting: 'Sedang memulakan…',
-        swipe:    '← Leret untuk semak video →'
+        swipe:       '← Leret untuk semak video →',
+        scanTitle:    'Arahkan kamera ke gambar ini',
+        scanSubtitle: 'Pastikan gambar kelihatan sepenuhnya dalam kamera'
       },
       // ── Tamil ──
       ta: {
         start:    'AR தொடங்க தட்டவும்',
         subtitle: 'தட்டிய பிறகு, கேமராவை இலக்கு படத்தில் செலுத்துங்கள்.',
         starting: 'தொடங்குகிறது…',
-        swipe:    '← வீடியோக்களை ஸ்வைப் செய்யுங்கள் →'
+        swipe:       '← வீடியோக்களை ஸ்வைப் செய்யுங்கள் →',
+        scanTitle:    'இந்த படத்தை நோக்கி கேமராவை திருப்புங்கள்',
+        scanSubtitle: 'படம் முழுவதும் கேமரா காட்சியில் தெரியுமாறு வையுங்கள்'
       },
       // ── Indonesian ──
       id: {
         start:    'Ketuk untuk Mulai AR',
         subtitle: 'Setelah mengetuk, arahkan\nkamera ke foto target.',
         starting: 'Memulai…',
-        swipe:    '← Geser untuk lihat video →'
+        swipe:       '← Geser untuk lihat video →',
+        scanTitle:    'Arahkan kamera ke gambar ini',
+        scanSubtitle: 'Pastikan gambar terlihat penuh di kamera Anda'
       },
       // ── Japanese ──
       ja: {
         start:    'タップしてARを開始',
         subtitle: 'タップ後、カメラをターゲット写真に向けてください。',
         starting: '起動中…',
-        swipe:    '← スワイプして動画を見る →'
+        swipe:       '← スワイプして動画を見る →',
+        scanTitle:    'この画像にカメラを向けてください',
+        scanSubtitle: '画像がカメラの視野内に完全に収まるようにしてください'
       },
       // ── Korean ──
       ko: {
         start:    'AR을 시작하려면 탭하세요',
         subtitle: '탭한 후 카메라를 대상 사진에 향하세요.',
         starting: '시작 중…',
-        swipe:    '← 스와이프하여 동영상 탐색 →'
+        swipe:       '← 스와이프하여 동영상 탐색 →',
+        scanTitle:    '이 이미지에 카메라를 향하세요',
+        scanSubtitle: '이미지가 카메라 화면에 완전히 들어오도록 하세요'
       },
       // ── Thai ──
       th: {
         start:    'แตะเพื่อเริ่ม AR',
         subtitle: 'หลังจากแตะ ชี้กล้องไปที่รูปเป้าหมาย',
         starting: 'กำลังเริ่ม…',
-        swipe:    '← เลื่อนเพื่อดูวิดีโอ →'
+        swipe:       '← เลื่อนเพื่อดูวิดีโอ →',
+        scanTitle:    'ชี้กล้องไปที่ภาพนี้',
+        scanSubtitle: 'ให้ภาพอยู่ในกรอบกล้องทั้งหมด'
       },
       // ── Arabic (RTL) ──
       ar: {
         start:    'اضغط لبدء AR',
         subtitle: 'بعد الضغط، وجّه الكاميرا نحو الصورة المستهدفة.',
         starting: 'جارٍ البدء…',
-        swipe:    '→ اسحب للتصفح ←',
+        swipe:       '→ اسحب للتصفح ←',
+        scanTitle:    'وجّه كاميرتك نحو هذه الصورة',
+        scanSubtitle: 'تأكد من أن الصورة ظاهرة بالكامل في الكاميرا',
         rtl: true
       },
       // ── French ──
@@ -243,35 +452,45 @@
         start:    'Appuyer pour démarrer AR',
         subtitle: 'Après avoir appuyé, pointez\nla caméra vers la photo cible.',
         starting: 'Démarrage…',
-        swipe:    '← Glisser pour parcourir les vidéos →'
+        swipe:       '← Glisser pour parcourir les vidéos →',
+        scanTitle:    'Pointez votre caméra vers cette image',
+        scanSubtitle: 'Gardez l\'image entièrement dans le champ de la caméra'
       },
       // ── Spanish ──
       es: {
         start:    'Toca para iniciar AR',
         subtitle: 'Después de tocar, apunta tu\ncámara a la foto objetivo.',
         starting: 'Iniciando…',
-        swipe:    '← Desliza para explorar los videos →'
+        swipe:       '← Desliza para explorar los videos →',
+        scanTitle:    'Apunta tu cámara a esta imagen',
+        scanSubtitle: 'Mantén la imagen completamente dentro del encuadre'
       },
       // ── German ──
       de: {
         start:    'Tippen zum AR starten',
         subtitle: 'Nach dem Tippen, Kamera\nauf das Zielfoto richten.',
         starting: 'Starte…',
-        swipe:    '← Wischen um Videos zu durchsuchen →'
+        swipe:       '← Wischen um Videos zu durchsuchen →',
+        scanTitle:    'Richte deine Kamera auf dieses Bild',
+        scanSubtitle: 'Halte das Bild vollständig im Kamerabild'
       },
       // ── Portuguese ──
       pt: {
         start:    'Toque para iniciar AR',
         subtitle: 'Após tocar, aponte sua\ncâmera para a foto alvo.',
         starting: 'Iniciando…',
-        swipe:    '← Deslize para navegar nos vídeos →'
+        swipe:       '← Deslize para navegar nos vídeos →',
+        scanTitle:    'Aponte sua câmera para esta imagem',
+        scanSubtitle: 'Mantenha a imagem totalmente visível na câmera'
       },
       // ── Hindi ──
       hi: {
         start:    'AR शुरू करने के लिए टैप करें',
         subtitle: 'टैप करने के बाद, कैमरे को लक्ष्य फ़ोटो की ओर करें।',
         starting: 'शुरू हो रहा है…',
-        swipe:    '← वीडियो देखने के लिए स्वाइप करें →'
+        swipe:       '← वीडियो देखने के लिए स्वाइप करें →',
+        scanTitle:    'कैमरे को इस छवि पर निर्देशित करें',
+        scanSubtitle: 'सुनिश्चित करें कि छवि पूरी तरह से कैमरे में दिखे'
       }
     };
 
@@ -299,11 +518,14 @@
       var p = document.querySelector('#loading p');
       p.innerHTML = t.subtitle.replace('\n', '<br>');
 
-      document.getElementById('swipe-hint').textContent = t.swipe;
+      document.getElementById('swipe-hint').textContent  = t.swipe;
+      document.getElementById('scan-title').textContent   = t.scanTitle;
+      document.getElementById('scan-subtitle').textContent = t.scanSubtitle;
 
       // RTL layout for Arabic
       if (t.rtl) {
         document.getElementById('loading').setAttribute('dir', 'rtl');
+        document.getElementById('scan-instruction').setAttribute('dir', 'rtl');
       }
 
       return t; // returned so the start-button handler can use t.starting
@@ -314,10 +536,12 @@
     // STARTUP
     // ============================================================
     window.addEventListener('DOMContentLoaded', function () {
-      const sceneEl   = document.querySelector('a-scene');
-      const loadingEl = document.getElementById('loading');
-      const hintEl    = document.getElementById('swipe-hint');
-      const dotEl     = document.getElementById('dot-indicator');
+      const sceneEl        = document.querySelector('a-scene');
+      const loadingEl      = document.getElementById('loading');
+      const hintEl         = document.getElementById('swipe-hint');
+      const dotEl          = document.getElementById('dot-indicator');
+      const hudContainer   = document.getElementById('hud-carousel-container');
+      const scanEl         = document.getElementById('scan-instruction');
 
       // Apply language immediately — before anything else is shown.
       var t = applyTranslations();
@@ -329,8 +553,11 @@
         arSystem = sceneEl.systems['mindar-image-system'];
       });
 
+      // When the camera is live: hide the start-gate and show the
+      // scanning instruction so the user knows what to point at.
       sceneEl.addEventListener('arReady', function () {
         loadingEl.style.display = 'none';
+        scanEl.classList.add('visible');
       });
 
 
@@ -394,31 +621,29 @@
 
 
       // ============================================================
-      // COVER FLOW CAROUSEL
+      // HUD COVER FLOW CAROUSEL
       // ============================================================
-      // 5 slots in a horizontal arc. Each plane lives at its own
-      // position/scale/rotation. On every swipe ALL planes animate
-      // simultaneously to their next slot — the whole arc flows left
-      // or right as a single smooth unit.
+      // Planes are children of <a-camera> so they are locked to the
+      // screen and never affected by the target image angle.
       //
-      // To tune the look, edit COVERFLOW_SLOTS:
-      //   x   = horizontal offset from target centre
-      //   z   = depth (negative = behind the target plane)
-      //   ry  = Y-axis rotation in degrees (inward tilt)
-      //   sx  = uniform scale (active = 0.20 = 20% of target width)
+      // Z coordinates are negative (in front of the camera lens):
+      //   center  z = -1.50    adjacent z = -1.56    far z = -1.70
+      //
+      // To tune: edit COVERFLOW_SLOTS.
+      //   x  = horizontal offset in camera space (0 = screen center)
+      //   z  = depth in front of lens (all negative)
+      //   ry = Y-axis inward tilt for the Cover Flow curve effect
+      //   sx = uniform scale  (center = 1.0 = ~70% of screen width)
 
       var ANIM_MS = 500;
-      var Y_BASE  = 0.7;  // vertical height shared by all cards
+      var Y_BASE  = 0;    // vertical offset in camera space (0 = screen center)
 
-      // Slot layout — cylindrical curve with large cards.
-      // To resize: edit sx (scale). To adjust spread: edit x. To adjust
-      // depth curve: edit z (more negative = rounder). To adjust tilt: edit ry.
       var COVERFLOW_SLOTS = [
-        { x: -1.00, z: -0.20, ry:  65, sx: 0.22 }, // 0: far-left   (small thumbnail)
-        { x: -0.65, z: -0.06, ry:  38, sx: 0.32 }, // 1: left        (small thumbnail)
-        { x:  0,    z:  0.02, ry:   0, sx: 1.00 }, // 2: center      (full target width)
-        { x:  0.65, z: -0.06, ry: -38, sx: 0.32 }, // 3: right       (small thumbnail)
-        { x:  1.00, z: -0.20, ry: -65, sx: 0.22 }, // 4: far-right   (small thumbnail)
+        { x: -1.20, z: -1.70, ry:  65, sx: 0.50 }, // 0: far-left
+        { x: -0.75, z: -1.56, ry:  38, sx: 0.70 }, // 1: left
+        { x:  0,    z: -1.50, ry:   0, sx: 1.00 }, // 2: center (full size, facing camera)
+        { x:  0.75, z: -1.56, ry: -38, sx: 0.70 }, // 3: right
+        { x:  1.20, z: -1.70, ry: -65, sx: 0.50 }, // 4: far-right
       ];
 
       // Maps a video index to its current slot (0–4).
@@ -430,45 +655,41 @@
         return (rel + 2) % VIDEO_COUNT;
       }
 
-      // Apply a slot's transform to a plane — instantly or animated.
-      // Pass skipRotation=true for the active (center) plane so that
-      // look-at handles rotation exclusively, with no animation conflict.
-      function applySlot(plane, slotIdx, animate, skipRotation) {
+      // Apply a slot's transform (position, scale, rotation, height) to a plane.
+      // In HUD/camera space all planes animate rotation normally — the center
+      // slot has ry=0 so it naturally faces forward, no special handling needed.
+      //
+      // height — the plane's correct aspect-ratio height (videoH/videoW).
+      //          Animated alongside scale so the card zooms in/out undistorted.
+      //          Pass undefined to leave height unchanged.
+      function applySlot(plane, slotIdx, animate, height) {
         var s      = COVERFLOW_SLOTS[slotIdx];
         var posStr = s.x + ' ' + Y_BASE + ' ' + s.z;
         var rotStr = '0 ' + s.ry + ' 0';
         var scaStr = s.sx + ' ' + s.sx + ' ' + s.sx;
+
         if (animate) {
           plane.setAttribute('animation__pos',   { property: 'position', to: posStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
+          plane.setAttribute('animation__rot',   { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
           plane.setAttribute('animation__scale', { property: 'scale',    to: scaStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
-          if (!skipRotation) {
-            plane.setAttribute('animation__rot', { property: 'rotation', to: rotStr, dur: ANIM_MS, easing: 'easeInOutCubic' });
-          } else {
-            plane.removeAttribute('animation__rot'); // let look-at own rotation
+          if (height !== undefined) {
+            plane.setAttribute('animation__height', { property: 'height', to: height, dur: ANIM_MS, easing: 'easeInOutCubic' });
           }
         } else {
           plane.setAttribute('position', posStr);
+          plane.setAttribute('rotation', rotStr);
           plane.setAttribute('scale',    scaStr);
-          if (!skipRotation) {
-            plane.setAttribute('rotation', rotStr);
+          if (height !== undefined) {
+            plane.setAttribute('height', height);
           }
         }
       }
 
       // Snap all planes to their current slots instantly and make them visible.
-      // Active plane: look-at handles rotation (skipRotation=true).
-      // Side planes: rotation is set to their tilt angle, look-at removed.
       function updateLayout() {
         planes.forEach(function (plane, i) {
-          var isCenter = (i === currentIndex);
-          applySlot(plane, getSlotIndex(i), false, isCenter);
-          plane.setAttribute('height',  getPlaneHeight(i));
+          applySlot(plane, getSlotIndex(i), false, getPlaneHeight(i));
           plane.setAttribute('visible', true);
-          if (isCenter) {
-            plane.setAttribute('look-at', '[camera]');
-          } else {
-            plane.removeAttribute('look-at');
-          }
         });
         dots.forEach(function (d, i) {
           d.classList.toggle('active', i === currentIndex);
@@ -478,13 +699,14 @@
       // Cancel all in-progress animations and hide every plane.
       function resetAllPlanes() {
         planes.forEach(function (p) {
-          p.removeAttribute('look-at');
           p.removeAttribute('animation__pos');
           p.removeAttribute('animation__rot');
           p.removeAttribute('animation__scale');
+          p.removeAttribute('animation__height');
           p.setAttribute('visible', false);
         });
       }
+
 
 
       // ============================================================
@@ -499,8 +721,11 @@
         startBtn.disabled = true;
         startBtn.textContent = t.starting; // translated "Starting…"
 
-        // Unlock all videos while still muted.
+        // Unlock all videos for unmuted playback while inside the gesture.
+        // iOS authorises future play() calls based on the muted state used here,
+        // so we must set muted=false NOW (in the gesture) to allow unmuted play later.
         videos.forEach(function (v) {
+          v.muted = false;
           v.play().catch(function () {});
           v.pause();
           v.currentTime = 0;
@@ -539,30 +764,18 @@
         if (!isMarkerVisible || isAnimating) return;
         isAnimating = true;
 
-        var oldIndex = currentIndex;
-
-        // Remove look-at from the outgoing center BEFORE animating it
-        // so the rotation animation can freely tilt it to its new slot.
-        planes[oldIndex].removeAttribute('look-at');
-
         // Pause and rewind the outgoing video.
-        videos[oldIndex].pause();
-        videos[oldIndex].currentTime = 0;
+        videos[currentIndex].pause();
+        videos[currentIndex].currentTime = 0;
 
         // Advance the active index.
         currentIndex = (currentIndex + direction + VIDEO_COUNT) % VIDEO_COUNT;
 
-        // Animate all planes to their new slots.
-        // The incoming center skips rotation animation (skipRotation=true)
-        // so look-at owns the rotation without any conflict.
+        // Animate ALL planes to their new HUD slots simultaneously.
+        // Rotation animates smoothly: incoming center tilts from ±38° → 0°,
+        // outgoing center tilts from 0° → ±38°, creating the Cover Flow flow.
         planes.forEach(function (plane, i) {
-          var isCenter = (i === currentIndex);
-          applySlot(plane, getSlotIndex(i), true, isCenter);
-          if (isCenter) {
-            // Add look-at IMMEDIATELY so the video faces the user
-            // throughout the slide-in animation, not just after it ends.
-            plane.setAttribute('look-at', '[camera]');
-          }
+          applySlot(plane, getSlotIndex(i), true, getPlaneHeight(i));
         });
 
         // Update dot indicator.
@@ -570,8 +783,7 @@
           d.classList.toggle('active', i === currentIndex);
         });
 
-        // Unmute and play the newly centered video.
-        videos[currentIndex].muted = false;
+        // Play the newly centered video (already unmuted from the start-gesture unlock).
         videos[currentIndex].play();
 
         setTimeout(function () { isAnimating = false; }, ANIM_MS + 50);
@@ -587,14 +799,17 @@
         isMarkerVisible = true;
         isAnimating     = false;
 
-        // Snap all 5 planes to their correct Cover Flow slots instantly,
-        // then make everything visible. No animation on first appearance.
+        // Dismiss the scanning instruction overlay on first detection.
+        scanEl.classList.remove('visible');
+
+        // Make the HUD carousel visible and snap all planes to their slots.
+        hudContainer.setAttribute('visible', 'true');
         resetAllPlanes();
         updateLayout();
         setIndicatorsVisible(true);
         dotEl.classList.add('visible');
 
-        videos[currentIndex].muted = false;
+        // Play active video (already unmuted from the start-gesture unlock).
         videos[currentIndex].play();
 
         if (!hintShown) {
@@ -606,13 +821,19 @@
 
       target.addEventListener('targetLost', function () {
         isMarkerVisible = false;
-        isAnimating     = false; // cancel any in-progress flip
-        videos[currentIndex].pause();
+        isAnimating     = false;
 
-        // Reset all planes so no half-rotated plane lingers.
+        // Pause and rewind the active video, then hide the entire HUD.
+        videos[currentIndex].pause();
+        videos[currentIndex].currentTime = 0;
+        hudContainer.setAttribute('visible', 'false');
         resetAllPlanes();
         setIndicatorsVisible(false);
         dotEl.classList.remove('visible');
+
+        // Re-show the scanning instruction so the user knows to
+        // point the camera back at the target image.
+        scanEl.classList.add('visible');
       });
 
 
