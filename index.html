@@ -58,7 +58,11 @@
         this._canvas        = document.createElement('canvas');
         this._canvas.width  = 1280;
         this._canvas.height = 720;
-        this._ctx           = this._canvas.getContext('2d');
+        // alpha:false forces every canvas pixel to alpha=255.
+        // iOS Safari's ctx.drawImage(video) sets alpha=0 on hardware-decoded
+        // frames, making the plane invisible when composited over the AR
+        // camera feed. This single flag eliminates that behaviour.
+        this._ctx           = this._canvas.getContext('2d', { alpha: false });
 
         // Paint canvas RED immediately so we can tell if texture binding works
         // even before the video plays: red plane = bound; nothing = not bound.
@@ -100,16 +104,30 @@
       },
 
       tick: function () {
-        if (!this._ctx || !this._videoEl || !this._texture) { return; }
+        if (!this._texture || !this._videoEl) { return; }
+
+        var mesh = this.el.getObject3D('mesh');
+        if (!mesh) { return; }
+
+        // A-Frame re-runs material.update() after any setAttribute('height'/geometry
+        // rebuild), overwriting our canvas texture with its own broken one.
+        // Re-bind every tick if it has been replaced.
+        if (mesh.material.map !== this._texture) {
+          mesh.material.map         = this._texture;
+          mesh.material.transparent = false;
+          mesh.material.needsUpdate = true;
+          _dbg(this.el.id + '_rebind', 'rebind #' + (this._rebindCount = (this._rebindCount||0)+1));
+        }
 
         var vid = this._videoEl;
-        // Report video state for plane-0 only (others are identical pattern).
+        // Report video state for plane-0 only.
         if (this.el.id === 'plane-0') {
           _dbg('v0_state',
             'paused=' + vid.paused +
             ' ready=' + vid.readyState +
             ' t=' + vid.currentTime.toFixed(1) +
-            ' draws=' + this._drawCount);
+            ' draws=' + this._drawCount +
+            ' map=' + (mesh.material.map === this._texture ? 'ours' : 'WRONG'));
         }
 
         if (!vid.paused && vid.readyState >= vid.HAVE_CURRENT_DATA) {
@@ -118,7 +136,7 @@
             this._drawCount++;
             this._texture.needsUpdate = true;
           } catch (e) {
-            _dbg(this.el.id + '_err', e.message);
+            _dbg(this.el.id + '_err', String(e));
           }
         }
       }
